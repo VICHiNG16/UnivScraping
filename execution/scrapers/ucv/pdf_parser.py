@@ -154,83 +154,90 @@ class PDFParser:
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 raw_pages = [page.extract_text() or "" for page in pdf.pages]
-                
-            # V8: Iron Dome - Remove Boilerplate (Headers/Footers)
-            full_text = self.boilerplate_rejector.clean_text(raw_pages)
-            # V8: Normalize Text (NFKD) to decompose chars like Ş/Ș
-            full_text = unicodedata.normalize("NFKD", full_text)
             
-            # V8: Metadata Detection (Level)
-            detected_level = None
-            text_upper = full_text.upper()[:2000] # Check first 2000 chars
-            if "MASTER" in text_upper:
-                detected_level = "Master"
-            elif "LICENTA" in text_upper or "LICENȚĂ" in text_upper:
-                detected_level = "Licenta"
-
-            # Pattern 1: Explicit Label Block (with Spots)
-            # V8: Hardened Regex (Punctuation, Digits, All Caps compatibility)
-            # Allow: letters, digits, spaces, -, (, ), ,, ., /, &
+            detected_level = None 
+            
+            # Patterns (Compile Once)
             name_chars = r"[A-Za-zȘȚĂÂÎșțăâî\d\s\-\(\),\./&]+"
-            
             p1 = re.compile(
                 r'(?:Specializarea|Programul|Domeniul|DISCIPLINA)\s*[:\-]?\s*(' + name_chars + r')[\s\S]{0,300}?Locuri\s*buget\s*[:\-]?\s*(\d+)[\s\S]{0,100}?Locuri\s*tax[aă]\s*[:\-]?\s*(\d+)',
                 re.IGNORECASE
             )
-            
-            # Pattern 2: Line Item (Name ... Numbers)
-            # Relaxed start anchor and case sensitivity
             p2 = re.compile(
-                r'^(' + name_chars + r')\s+(\d+)\s*loc.*?buget.*?(\d+)\s*loc.*?tax',
+                r'^(' + name_chars + r'?)\s+(\d+)\s*loc.*?buget.*?(\d+)\s*loc.*?tax',
                 re.MULTILINE | re.IGNORECASE
             )
-
-            # Pattern 3: Name-Only Header (Fallback for Quiz/Grile PDFs where spots are missing)
-            # Example: "DISCIPLINA: ECOLOGIA SI PROTECTIA MEDIULUI"
             p3 = re.compile(
                 r'(?:DISCIPLINA|SPECIALIZAREA|PROGRAMUL)\s*[:\-]\s*([A-ZȘȚĂÂÎ \-]+?)(?:\n|  |$)',
                 re.IGNORECASE
             )
-            
-            # Apply Pattern 1 (Strongest - Name + Spots)
-            for m in p1.finditer(full_text):
-                results.append({
-                    "program_name": m.group(1).strip(),
-                    "spots_budget": int(m.group(2)),
-                    "spots_tax": int(m.group(3)),
-                    "level": detected_level, # V8: Fix Matcher Score
-                    "domain": None,
-                    "raw_row": m.group(0)[:100]
-                })
 
-            # Apply Pattern 2 (Strong - Line Item)
-            for m in p2.finditer(full_text):
-                name = m.group(1).strip()
-                if len(name) > 5 and not any(r["program_name"] == name for r in results):
+            # V8.9: Page-by-Page Processing (Provenance + Isolation)
+            for page_idx, raw_text in enumerate(raw_pages):
+                if not raw_text: continue
+                
+                # Clean Boilerplate
+                clean_text = self.boilerplate_rejector.clean_text([raw_text])
+                
+                # Normalize Unicode
+                clean_text = unicodedata.normalize("NFKD", clean_text)
+                
+                # V8.8: Fix Hyphenation (merge split words)
+                # "Ingineria\nsistemelor" -> "Ingineria sistemelor"
+                # "Tehno-\nlogie" -> "Tehnologie"
+                clean_text = clean_text.replace("-\n", "").replace("\n", " ")
+                
+                # Metadata (Level - primitive check per page or inherited?)
+                # Inherit from global detection or re-detect? Re-detect is safer for mixed PDFs.
+                page_level = detected_level
+                text_upper = clean_text.upper()
+                if "MASTER" in text_upper:
+                    page_level = "Master"
+                elif "LICENTA" in text_upper or "LICENȚĂ" in text_upper:
+                    page_level = "Licenta"
+
+                # Apply Pattern 1 (Strongest - Name + Spots)
+                for m in p1.finditer(clean_text):
                     results.append({
-                        "program_name": name,
+                        "program_name": m.group(1).strip(),
                         "spots_budget": int(m.group(2)),
                         "spots_tax": int(m.group(3)),
-                        "level": detected_level, # V8: Fix Matcher Score
+                        "level": page_level, 
                         "domain": None,
-                        "raw_row": m.group(0)
+                        "raw_row": m.group(0)[:100],
+                        "page": page_idx + 1 # Provenance
                     })
-                    
-            # Apply Pattern 3 (Weakest - Name Only) - ONLY if no spot-based matches found? 
-            # Or append as enrichment? Let's append, matcher handles deduplication.
-            if not results: # Only try name-only if we didn't get better data
-                for m in p3.finditer(full_text):
+
+                # Apply Pattern 2 (Strong - Line Item)
+                for m in p2.finditer(clean_text):
                     name = m.group(1).strip()
-                    # Filter noise (e.g. "MASTER", "AGRONOMIE")
+                    # Deduplicate locally (per page - or global? global results list)
+                    if len(name) > 5 and not any(r["program_name"] == name for r in results):
+                        results.append({
+                            "program_name": name,
+                            "spots_budget": int(m.group(2)),
+                            "spots_tax": int(m.group(3)),
+                            "level": page_level,
+                            "domain": None,
+                            "raw_row": m.group(0),
+                            "page": page_idx + 1
+                        })
+                        
+                # Apply Pattern 3 (Weakest - Name Only)
+                # V8.8: Stricter DISCIPLINA - only if we haven't found spots on this page? 
+                # Or just collect everything and let Validator filter.
+                for m in p3.finditer(clean_text):
+                    name = m.group(1).strip()
                     if len(name) > 5 and "MASTER" not in name.upper() and "AGRONOMIE" not in name.upper():
                          if not any(r["program_name"] == name for r in results):
                             results.append({
                                 "program_name": name,
                                 "spots_budget": None,
                                 "spots_tax": None,
-                                "level": detected_level, # V8: Fix Matcher Score
+                                "level": page_level, 
                                 "domain": None,
-                                "raw_row": m.group(0)
+                                "raw_row": m.group(0),
+                                "page": page_idx + 1
                             })
         
         except Exception as e:
