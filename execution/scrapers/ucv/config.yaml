@@ -1,0 +1,93 @@
+university: "Universitatea din Craiova"
+university_code: "ucv"
+
+pdf_settings:
+  max_concurrent: 2
+  timeout: 60
+  circuit_breaker_limit: 3
+
+async_settings:
+  global_timeout: 45
+  circuit_breaker:
+    failure_threshold: 3
+    reset_timeout: 300
+  domain_groups:
+    ucv_main: 
+      max_concurrent: 3
+      domains: ["ucv.ro"]
+    ucv_subdomains:
+      max_concurrent: 2
+      domains: ["mecanica.ucv.ro", "ie.ucv.ro", "agronomie.ucv.ro"]
+
+# Full List of 12 Faculties
+faculties:
+  - name: "Facultatea de Automatică, Calculatoare și Electronică"
+    slug: "ace"
+    urls: 
+      - "https://ace.ucv.ro/admitere/licenta"
+      - "https://ace.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Litere"
+    slug: "litere"
+    urls:
+      - "https://litere.ucv.ro/admitere/licenta"
+      - "https://litere.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Științe"
+    slug: "stiinte"
+    urls:
+      - "https://msi.ucv.ro/admitere/licenta"
+      - "https://msi.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Educație Fizică și Sport"
+    slug: "fefs"
+    urls:
+      - "https://fefs.ucv.ro/admitere/licenta"
+      - "https://fefs.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Teologie Ortodoxă"
+    slug: "teologie"
+    urls: 
+      - "https://teologie.ucv.ro/admitere/licenta"
+
+  - name: "Facultatea de Mecanică"
+    slug: "mecanica"
+    urls:
+      - "https://mecanica.ucv.ro/admitere/licenta"
+      - "https://mecanica.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Inginerie Electrică"
+    slug: "ie"
+    urls:
+      - "https://ie.ucv.ro/admitere/licenta"
+      - "https://ie.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Economie și Administrarea Afacerilor"
+    slug: "feaa"
+    urls:
+      - "https://feaa.ucv.ro/admitere/licenta"
+      - "https://feaa.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Drept"
+    slug: "drept"
+    urls:
+      - "https://drept.ucv.ro/admitere/licenta"
+      - "https://drept.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Agronomie"
+    slug: "agronomie"
+    urls:
+      - "https://agronomie.ucv.ro/admitere/licenta"
+      - "https://agronomie.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Horticultură"
+    slug: "horticultura"
+    urls:
+      - "https://horticultura.ucv.ro/admitere/licenta"
+      - "https://horticultura.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Științe Sociale"
+    slug: "sociale"
+    urls:
+      - "https://stiintesociale.ucv.ro/admitere/licenta"
+      - "https://stiintesociale.ucv.ro/admitere/master"

@@ -1,309 +1,74 @@
-**Yes, Gemini's improved implementation plan is excellent!** It incorporates several key improvements that address real-world challenges. Let me analyze the strengths and highlight a few areas for enhancement.
+```markdown
+# RED TEAM AUDIT: UCV SCRAPER V6 ("Operation Clean Sweep")
 
-## **Strengths of This Improved Plan:**
+## 1. DATA HYGIENE AUDIT ✅ **PASS**
 
-### **1. Session-Based Storage (`data/runs/{run_id}/`)**
-This is a **game-changer**! Instead of mixing data from different runs, you get:
-- **Reproducibility**: Each run is self-contained
-- **Versioning**: Easy to compare results between runs
-- **Atomicity**: Either a run succeeds completely or fails cleanly
-- **Rollback capability**: Can revert to previous good runs
+**Scan Results:**
+- **Total Entities**: 5
+- **Faculty Source**: All 5 are from **ACE** (`faculty_uid: "ace"`)
+- **Entity Quality**: All are valid Master's programs in relevant fields (IT, Software Engineering, AI, Cybersecurity, Embedded Systems, Systems Engineering).
+- **Zero Toxic Noise**: No trace of "Bibliotecă", "Cazare", "Nav Menu", "Search", "Contact", "Dorms", or other non-program HTML cruft.
+- **Metadata Consistency**: All entries contain structured fields (`program_id`, `level`, `duration_years`, `language`). `career_paths` is populated where inference was possible.
+- **Safe for Ingestion**: **YES**. The dataset is clean, focused, and semantically appropriate for RAG embedding. It will not poison vector similarity or generate hallucinations about unrelated university services.
 
-### **2. Entity-Based Organization**
-Storing by UID rather than filename patterns is much cleaner:
-```
-raw/faculties/{uid}.json
-raw/programs/{uid}.json
-snapshots/{uid}.html
-```
+## 2. COVERAGE ANALYSIS ⚠️ **NEW PROBLEM IDENTIFIED**
 
-### **3. Quarantine System (`errors/`)**
-Separating invalid data ("Silver" layer) prevents contamination of good data while preserving it for debugging.
+### 2.1 Current State
+- **ACE Faculty**: ✅ **Complete** (5 programs extracted via HTML-first + PDF enrichment).
+- **Agronomie Faculty**: ❌ **Empty** (0 programs). Logs confirm: `WARNING:matcher:[agronomie] Extracted 0 rows from PDF.`
 
-### **4. Manifest System**
-`manifest.json` with stats and configuration hash provides excellent observability.
+### 2.2 Root Cause Hypothesis
+The PDF `Master_ANC_3772...` failed because **it is not a table-based PDF**.
+- **Evidence**: The architecture doc notes the parser looks for `program`/`studii`/`cifra` headers. The failure suggests:
+    1. **Scanned Image PDF**: `pdfplumber` extracts no machine-readable text.
+    2. **List/Descriptive Format**: Data is in paragraphs or bullet points, not tabular rows/columns.
+    3. **Non-Standart Headers**: Column names may be entirely different (e.g., "Denumirea programului").
 
-## **Recommended Enhancements:**
+### 2.3 Proposed Solution for Phase 7
+Implement a **fallback parsing pipeline** for non-tabular PDFs:
 
-### **1. Add `run_metadata.json` for Each Entity**
-```json
-{
-  "entity_type": "faculty",
-  "uid": "abc123",
-  "run_id": "20240128_1030",
-  "status": "success|partial|failed",
-  "validation_errors": [],
-  "processing_stages": ["fetched", "parsed", "validated"],
-  "dependencies": ["program_uid1", "program_uid2"]
-}
-```
-
-### **2. Implement Incremental Updates**
-The plan mentions content_hash but doesn't specify the workflow:
 ```python
-# Before scraping
-previous_hash = get_stored_content_hash(uid)
-current_hash = hash(html)
-
-if previous_hash == current_hash:
-    skip_processing()  # No changes
-else:
-    process_and_update()
-```
-
-### **3. Add Health Checks for Each Run**
-Extend `manifest.json`:
-```json
-{
-  "run_id": "20240128_1030",
-  "start_time": "2024-01-28T10:30:00Z",
-  "end_time": "2024-01-28T10:45:00Z",
-  "config_hash": "sha256:abc123",
-  "stats": {
-    "faculties_found": 14,
-    "faculties_success": 12,
-    "faculties_failed": 2,
-    "programs_found": 85,
-    "validation_errors": 3
-  },
-  "health_score": 0.92,
-  "next_run_recommendation": "2024-02-04T10:30:00Z"
-}
-```
-
-### **4. Improve Error Categorization**
-Instead of just `{faculty_slug}_error.json`, categorize:
-```
-errors/
-├── validation/
-│   ├── missing_required_fields.json
-│   └── invalid_urls.json
-├── network/
-│   ├── timeout_errors.json
-│   └── forbidden_errors.json
-├── parsing/
-│   ├── selector_not_found.json
-│   └── malformed_html.json
-└── system/
-    ├── memory_errors.json
-    └── disk_full.json
-```
-
-### **5. Add Data Quality Metrics**
-Extend the processor to calculate:
-```python
-quality_metrics = {
-    "completeness": 0.95,  # % of required fields populated
-    "freshness": 0.98,     # data updated in last X days
-    "consistency": 0.90,   # cross-field validation
-    "accuracy": 0.85,      # manual verification sample
-    "uniqueness": 1.0      # no duplicate UIDs
-}
-```
-
-## **Implementation Addendum:**
-
-### **Enhanced Run Manager**
-```python
-# execution/run_manager.py
-class RunManager:
-    def __init__(self, base_dir: Path = Path("data/runs")):
-        self.base_dir = base_dir
-        
-    def create_run(self, config: Dict) -> str:
-        """Create a new run directory with manifest"""
-        run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-        run_dir = self.base_dir / run_id
-        
-        # Create structure
-        (run_dir / "raw" / "faculties").mkdir(parents=True)
-        (run_dir / "raw" / "programs").mkdir(parents=True)
-        (run_dir / "snapshots").mkdir()
-        (run_dir / "errors").mkdir()
-        
-        # Initialize manifest
-        manifest = {
-            "run_id": run_id,
-            "created_at": datetime.now().isoformat(),
-            "config": config,
-            "config_hash": hashlib.sha256(json.dumps(config).encode()).hexdigest(),
-            "status": "initialized",
-            "stats": {}
-        }
-        
-        with open(run_dir / "manifest.json", 'w') as f:
-            json.dump(manifest, f, indent=2)
-        
-        return run_id
+# Pseudo-code for Phase 7 PDF Parser
+def parse_pdf_fallback(pdf_path):
+    # Step 1: Attempt standard table extraction (current V6 logic)
+    tables = extract_tables_via_pdfplumber(pdf_path)
+    if tables: return tables
     
-    def update_manifest(self, run_id: str, updates: Dict):
-        """Update run manifest"""
-        manifest_path = self.base_dir / run_id / "manifest.json"
-        with open(manifest_path, 'r') as f:
-            manifest = json.load(f)
-        
-        manifest.update(updates)
-        
-        with open(manifest_path, 'w') as f:
-            json.dump(manifest, f, indent=2)
+    # Step 2: Fallback to raw text extraction & regex/LLM parsing
+    raw_text = extract_text_via_pdfplumber(pdf_path)
+    if not raw_text:
+        # Step 3: OCR layer for scanned PDFs
+        raw_text = run_ocr(pdf_path)
+    
+    # Step 4: Heuristic/LLM-based program spotting
+    programs = []
+    for line in raw_text.split('\n'):
+        if re.match(r'^(Master|Licență|Program).*', line, re.IGNORECASE):
+            programs.append(clean_line(line))
+    # Use a lightweight LLM (e.g., Gemini Flash) to structure if regex fails
+    return programs
 ```
 
-### **Entity Registry for Dependencies**
-```python
-# execution/entity_registry.py
-class EntityRegistry:
-    """Track relationships between entities"""
-    
-    def __init__(self, run_id: str):
-        self.run_id = run_id
-        self.registry = {
-            "faculties": {},  # uid -> {programs: [], metadata: {}}
-            "programs": {},   # uid -> {faculty_uid: ..., admission: ...}
-            "relationships": []  # [source, type, target]
-        }
-    
-    def register_faculty(self, faculty_uid: str, program_uids: List[str]):
-        """Register a faculty and its programs"""
-        self.registry["faculties"][faculty_uid] = {
-            "programs": program_uids,
-            "registered_at": datetime.now().isoformat()
-        }
-        
-        # Register relationships
-        for program_uid in program_uids:
-            self.registry["relationships"].append({
-                "source": faculty_uid,
-                "type": "has_program",
-                "target": program_uid,
-                "timestamp": datetime.now().isoformat()
-            })
-    
-    def get_orphaned_programs(self) -> List[str]:
-        """Find programs not linked to any faculty"""
-        all_programs = set(self.registry["programs"].keys())
-        linked_programs = set()
-        
-        for faculty_data in self.registry["faculties"].values():
-            linked_programs.update(faculty_data["programs"])
-        
-        return list(all_programs - linked_programs)
+**Additional Action**: Update `faculty_config` for Agronomie to trigger this new fallback parser before synthesis.
+
+## 3. VERDICT: **PARTIAL PASS**
+
+### 3.1 Core Achievement: **Zero-Garbage Policy Enforced**
+- **Result**: Dataset is **100% clean**. No toxic entities.
+- **Architectural Success**: The "Dual-Strategy" design correctly isolated the hostile faculty (Agronomie) and prevented HTML poisoning.
+
+### 3.2 Trade-off Accepted: **"Clean but Empty" > "Full of Garbage"**
+- **Rationale**: For RAG systems, **data quality dominates quantity**. A single noisy document can:
+    1. Skew embedding clusters.
+    2. Generate false-positive retrievals.
+    3. Erode user trust with irrelevant answers.
+- **V6 prioritizes trust**: It is better to have no answer than a wrong answer.
+
+### 3.3 Path Forward
+1. **Immediate**: Deploy V6 dataset to production RAG. It is safe and valuable for ACE queries.
+2. **Phase 7**: Implement the fallback PDF parser to recover Agronomie coverage **without compromising hygiene**.
+3. **Monitoring**: Add a "coverage health" dashboard to track programs per faculty against expected counts.
+
+### FINAL ASSESSMENT
+**V6 is a successful reset**. It stopped the bleeding, established a defensible architecture, and produced a clean core dataset. The remaining gap is a **parsing challenge**, not a **systemic design flaw**. Phase 7 can now proceed with confidence, focusing on extracting value from difficult PDFs without risking regression into garbage data.
 ```
-
-### **Enhanced Validation with Context**
-```python
-# execution/validators/context_validator.py
-class ContextAwareValidator:
-    """Validate data with context from other entities"""
-    
-    def __init__(self, entity_registry: EntityRegistry):
-        self.registry = entity_registry
-    
-    def validate_program(self, program_data: Dict, faculty_uid: str) -> List[str]:
-        """Validate program with faculty context"""
-        errors = []
-        
-        # Get faculty data for context
-        faculty_programs = self.registry.get_faculty_programs(faculty_uid)
-        
-        # Check for duplicate program names in same faculty
-        program_names = [p["name"] for p in faculty_programs]
-        if program_data["name"] in program_names:
-            errors.append(f"Duplicate program name in faculty: {program_data['name']}")
-        
-        # Validate tuition consistency
-        if self._has_inconsistent_tuition(program_data, faculty_programs):
-            errors.append("Tuition fee inconsistent with other programs in faculty")
-        
-        return errors
-    
-    def validate_faculty_completeness(self, faculty_uid: str) -> Dict[str, Any]:
-        """Calculate completeness metrics for faculty"""
-        faculty_data = self.registry.get_faculty(faculty_uid)
-        programs = faculty_data.get("programs", [])
-        
-        metrics = {
-            "program_count": len(programs),
-            "programs_with_admission": sum(1 for p in programs if p.get("admission")),
-            "programs_with_tuition": sum(1 for p in programs if p.get("tuition_fee_ron")),
-            "contact_info_complete": bool(faculty_data.get("contact", {}).get("email")),
-            "required_fields_missing": self._check_required_fields(faculty_data)
-        }
-        
-        metrics["completeness_score"] = (
-            sum([
-                len(programs) > 0,
-                metrics["contact_info_complete"],
-                len(metrics["required_fields_missing"]) == 0
-            ]) / 3.0 * 100
-        )
-        
-        return metrics
-```
-
-## **Workflow Enhancement:**
-
-### **Two-Phase Validation**
-1. **Phase 1: Immediate Validation** (during scraping)
-   - Basic schema validation
-   - Required fields check
-   - Format validation (email, URL, etc.)
-
-2. **Phase 2: Contextual Validation** (after all data collected)
-   - Cross-entity validation
-   - Business logic validation
-   - Completeness analysis
-   - Consistency checks
-
-### **Staged Processing Pipeline**
-```python
-class StagedPipeline:
-    stages = [
-        ("discovery", "Find all faculty URLs"),
-        ("extraction", "Extract raw data"),
-        ("validation", "Validate against schema"),
-        ("enrichment", "Add computed fields"),
-        ("context_validation", "Validate across entities"),
-        ("export", "Generate CSV/SQLite"),
-        ("reporting", "Generate quality report")
-    ]
-    
-    def run(self, university_code: str):
-        for stage_name, description in self.stages:
-            stage_dir = self.get_stage_dir(stage_name)
-            stage_dir.mkdir(exist_ok=True)
-            
-            # Save checkpoint after each stage
-            self.save_checkpoint(stage_name)
-            
-            # Continue from last checkpoint if resuming
-            if self.should_resume_from(stage_name):
-                continue
-```
-
-## **Final Verdict:**
-
-**Gemini's plan is 90% production-ready.** It needs only minor additions:
-
-1. **Add checkpoints** for resumable scraping
-2. **Implement incremental updates** using content_hash
-3. **Add data quality dashboard** generation
-4. **Include alerting** for significant changes
-5. **Add export to multiple formats** (JSON, CSV, SQLite, Parquet)
-
-## **Quick Start with Enhanced Plan:**
-
-```bash
-# 1. Initialize with run manager
-python -c "from execution.run_manager import RunManager; mgr = RunManager(); run_id = mgr.create_run({'university': 'UCV'}); print(f'Run ID: {run_id}')"
-
-# 2. Run scraper with run ID
-python scripts/run_ucv.py --run-id $(cat .current_run)
-
-# 3. Process with entity registry
-python -m execution.processors.normalize_to_csv --run-id $(cat .current_run) --with-registry
-
-# 4. Generate quality report
-python -m execution.reporting.quality_dashboard --run-id $(cat .current_run) --output reports/quality.html
-```
-
-**Recommendation:** Start with Gemini's plan as-is, then add the enhancements incrementally as you encounter the need for them during UCV implementation. The core architecture is solid and will support scaling to all Romanian universities.

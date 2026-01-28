@@ -1,0 +1,10 @@
+requests
+beautifulsoup4
+pyyaml
+aiohttp
+aiofiles
+pdfplumber
+camelot-py
+opencv-python-headless
+pytesseract
+rapidfuzz
