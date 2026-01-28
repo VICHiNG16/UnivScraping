@@ -200,6 +200,11 @@ class DataFusionEngine:
         self.run_id = run_id
         self.base_dir = Path("data/runs") / run_id
         self.pdf_parser = PDFParser()
+        # V9: Validator
+        from execution.processors.validator import SemanticValidator
+        self.validator = SemanticValidator()
+        
+        # V8: Dynamic Year
         self.pdf_parser = PDFParser()
         # V8: Dynamic Year
         self.admission_year = datetime.datetime.now().year
@@ -287,8 +292,7 @@ class DataFusionEngine:
             logger.warning(f"[{slug}] Could not identify ANY relevant PDF.")
             return
             
-        pdf_rows = []
-        pdf_url = ""
+        pdf_rows_list = [] # V8.7: List of {rows, url, score}
         
         for candidate in spots_candidates:
             pdf_path = Path(candidate["local_path"])
@@ -318,16 +322,21 @@ class DataFusionEngine:
                          logger.warning(f"[{slug}] PDF yielded mostly garbage rows (e.g. '{raw_rows[0].get('program_name')}'). Discarding.")
                          continue # Try next candidate
                     
-                    pdf_rows = valid_rows
-                    logger.info(f"[{slug}] Success! Extracted {len(pdf_rows)} rows.")
-                    pdf_url = candidate["pdf_url"]
-                    break
+                    pdf_rows_list.append({
+                        "rows": valid_rows,
+                        "url": candidate["pdf_url"],
+                        "score": c_score,
+                        "link_text": candidate["link_text"]
+                    })
+                    logger.info(f"[{slug}] Success! Extracted {len(valid_rows)} rows from {candidate['link_text']}")
+                    # V8.7: Do NOT break. Continue to next candidate.
+                    # break 
                 else:
                      logger.warning(f"[{slug}] Extraction failed (0 rows) for {pdf_path.name}. Trying next candidate...")
             except Exception as e:
                 logger.error(f"Error parsing {pdf_path}: {e}")
 
-        if not pdf_rows:
+        if not pdf_rows_list:
             logger.warning(f"[{slug}] All PDF candidates failed to yield Data.")
             return
 
@@ -338,17 +347,15 @@ class DataFusionEngine:
         if len(valid_rows) < len(pdf_rows) * 0.5:
              logger.warning(f"[{slug}] PDF yielded mostly garbage rows (e.g. '{pdf_rows[0]['program_name']}'). Discarding.")
              # Ideally we would loop back and try next candidate, but for now just filter?
-             # No, if we accepted it, we broke the loop.
-             # We should put validation INSIDE the loop.
              pass # Logic flaw in previous step, fixed below.
 
         # 4. Phase 8.6: Load and Fuse Grades
         grades_map = self._load_grades(slug)
-        if grades_map:
-             logger.info(f"[{slug}] Found {len(grades_map)} extracted grades to fuse.")
-             
-        # 3. Match and Update
-        self._fuse_data(slug, programs, valid_rows, pdf_url, faculty_uid, grades_map)
+        
+        # 3. Match and Update (Phase 8.7: Multi-PDF)
+        # Iterate ALL valid candidates and fuse
+        for res in pdf_rows_list:
+             self._fuse_data(slug, programs, res["rows"], res["url"], faculty_uid, grades_map, res["score"], res["link_text"])
         
     def _load_grades(self, slug: str) -> Dict[str, float]:
         """
@@ -389,7 +396,7 @@ class DataFusionEngine:
             
         return ranked_candidates
 
-    def _fuse_data(self, slug: str, programs: List[Dict], pdf_rows: List[Dict], pdf_url: str, faculty_uid: str, grades_map: Dict = None):
+    def _fuse_data(self, slug: str, programs: List[Dict], pdf_rows: List[Dict], pdf_url: str, faculty_uid: str, grades_map: Dict = None, likelihood_score: float = 0, source_name: str = ""):
         """
         Fuzzy matching logic using V4 Matcher.
         V8: Now accepting explicit faculty_uid (Hash) and slug.
@@ -398,6 +405,16 @@ class DataFusionEngine:
         if not programs and pdf_rows:
             logger.info(f"[{slug}] PDF-Only Mode: Synthesizing {len(pdf_rows)} programs from PDF.")
             for row in pdf_rows:
+                # V9: Zero Garbage Validation
+                val_res = self.validator.validate_program_name(row['program_name'])
+                if val_res["status"] == "FAIL":
+                    logger.warning(f"[{slug}] Dropping Garbage Candidate: '{row['program_name']}' (Reason: {val_res['reason']})")
+                    continue
+                if val_res["status"] == "QUARANTINE":
+                     logger.warning(f"[{slug}] Quarantining Candidate: '{row['program_name']}' (Score: {val_res['score']})")
+                     self._save_quarantine(slug, row, val_res)
+                     continue
+
                 # Create Minimal Program Entity
                 match_id = hashlib.sha256(f"{slug}|{row['program_name']}".encode()).hexdigest()
                 career_paths = self._infer_career_paths(row['program_name'])
@@ -455,25 +472,47 @@ class DataFusionEngine:
                     logger.warning(f"  [AMBIGUOUS] Check manually: {html_name}")
                 
                 # UPDATE PROGRAM
-                prog["spots_budget"] = match.get("spots_budget", 0)
-                prog["spots_tax"] = match.get("spots_tax", 0)
-                prog["metadata"] = prog.get("metadata", {})
-                prog["metadata"]["pdf_match_score"] = score
-                prog["metadata"]["pdf_match_name"] = match_name
-                prog["metadata"]["pdf_source"] = pdf_url
-                prog["metadata"]["match_status"] = status
+                # V8.7: Evidence Collection
+                prog["evidence"] = prog.get("evidence", {})
+                prog["evidence"]["spots"] = prog["evidence"].get("spots", [])
                 
-                # V8: RAG Schema 2.0 - Update Embedding Text with Provenance
-                career_paths = prog.get("career_paths", self._infer_career_paths(html_name))
-                prog["text_for_embedding"] = (
-                    f"Programul: {html_name} ({prog.get('level', 'Master')})\n"
-                    f"Facultate: {slug.upper()}\n"
-                    f"Locuri Buget: {match.get('spots_budget', 0)} (Sursa: PDF {pdf_url})\n"
-                    f"Locuri Taxa: {match.get('spots_tax', 0)} (Sursa: PDF {pdf_url})\n"
-                    f"[INFERENCE]\n"
-                    f"Cariera: {', '.join(career_paths)}"
-                )
+                evidence_entry = {
+                    "source": pdf_url,
+                    "source_name": source_name,
+                    "value": {"budget": match.get("spots_budget", 0), "tax": match.get("spots_tax", 0)},
+                    "score": likelihood_score, # Content score of the PDF
+                    "match_score": score, # Fuzzy match score
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+                prog["evidence"]["spots"].append(evidence_entry)
                 
+                # Arbitrate: Pick Highest Score (Content + Match)
+                # Simple logic: If this match is better than current 'source_score', overwrite.
+                current_score = prog.get("metadata", {}).get("best_source_score", -999)
+                this_total_score = likelihood_score + (score * 10) # Weighted
+                
+                if this_total_score > current_score:
+                    prog["spots_budget"] = match.get("spots_budget", 0)
+                    prog["spots_tax"] = match.get("spots_tax", 0)
+                    
+                    prog["metadata"] = prog.get("metadata", {})
+                    prog["metadata"]["best_source_score"] = this_total_score
+                    prog["metadata"]["pdf_match_score"] = score
+                    prog["metadata"]["pdf_match_name"] = match_name
+                    prog["metadata"]["pdf_source"] = pdf_url
+                    prog["metadata"]["match_status"] = status
+                    
+                    # Update Embedding Text
+                    career_paths = prog.get("career_paths", self._infer_career_paths(html_name))
+                    prog["text_for_embedding"] = (
+                        f"Programul: {html_name} ({prog.get('level', 'Master')})\n"
+                        f"Facultate: {slug.upper()}\n"
+                        f"Locuri Buget: {match.get('spots_budget', 0)} (Sursa: PDF {source_name})\n"
+                        f"Locuri Taxa: {match.get('spots_tax', 0)} (Sursa: PDF {source_name})\n"
+                        f"[INFERENCE]\n"
+                        f"Cariera: {', '.join(career_paths)}"
+                    )
+
                 self._save_program(slug, prog)
             else:
                 logger.info(f"No match for '{html_name}' (Best Score: {score:.2f})")
@@ -526,6 +565,20 @@ class DataFusionEngine:
         path = self.base_dir / "raw" / slug / "programs" / f"{program['uid']}.json"
         with open(path, "w", encoding="utf-8") as f:
             json.dump(program, f, indent=2, ensure_ascii=False)
+
+    def _save_quarantine(self, slug: str, row: Dict, val_res: Dict):
+        q_dir = self.base_dir / "raw" / slug / "quarantine"
+        q_dir.mkdir(parents=True, exist_ok=True)
+        
+        uid = hashlib.sha256(row['program_name'].encode()).hexdigest()
+        item = {
+            "name": row['program_name'],
+            "reason": val_res['reason'],
+            "score": val_res['score'],
+            "raw_row": row
+        }
+        with open(q_dir / f"{uid}.json", "w", encoding="utf-8") as f:
+            json.dump(item, f, indent=2, ensure_ascii=False)
 
     def _romanian_normalize(self, text: str) -> str:
         if not text: return ""
