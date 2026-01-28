@@ -1,0 +1,141 @@
+**This is a solid, production-ready plan.** You've successfully integrated the critical feedback (per-faculty overrides, run-based immutability, quarantine layer, content hashing). With these improvements, this will survive contact with UCV's messy reality.
+
+However, there are **specific implementation landmines** you need to address before writing the first line of code. These aren't architectural flaws—they're operational gotchas that will silently corrupt your data or break the pipeline after 3 months of running.
+
+## 🟢 What Works (Keep This)
+
+**Run-based storage (`data/runs/{run_id}/`)**  
+This is the correct abstraction. It gives you time-travel debugging and prevents the "oops I overwrote yesterday's data" catastrophe.
+
+**Content hashing for incremental updates**  
+Smart. UCV faculties update sporadically (e.g., FEAA only updates admission data in July/September). You'll save bandwidth and server load.
+
+**Quarantine layer (`errors/`)**  
+Critical for unmaintained faculties. When `litere.ucv.ro` has malformed HTML from 2019, you don't want the whole pipeline to crash—you want the 11 working faculties to export to CSV while Litere goes to quarantine for manual review.
+
+## 🚨 Implementation Landmines (Fix These Now)
+
+### 1. **The UID Collision Problem**
+**Current**: `uid: Stable hash of the entity source URL`  
+**Problem**: If you scrape `feaa.ucv.ro/admitere` in January and again in July, it's the same URL but different admission cycles (2025 vs 2026 data). Hashing only the URL creates collisions.
+
+**Fix**:
+```yaml
+# In provenance metadata
+uid: hash(url + academic_year + program_code)  # Composite key
+source_url: "https://feaa.ucv.ro/admitere-2025"
+content_hash: "md5-of-html"  # For detecting if page changed
+```
+
+### 2. **Snapshot Granularity Mismatch**
+**Current**: `snapshots/{uid}.html`  
+**Problem**: One URL contains multiple entities. Example: `ace.ucv.ro/programe` has 15 degree programs on one page. If you save `{program_uid}.html`, you duplicate the HTML 15 times. If the scraper crashes mid-extraction, you lose the source.
+
+**Fix**: Snapshots keyed by URL, entities keyed by UID:
+```
+snapshots/
+  {hash_of_url}.html          # One per fetched URL
+  {hash_of_url}.meta.json     # URL, timestamp, HTTP status
+  
+raw/programs/
+  {uid}.json                  # Extracted entity + reference to source snapshot
+```
+
+### 3. **"Validate Immediately" Still Too Strict**
+**Current**: Extract → Validate → (Valid→Raw | Invalid→Quarantine)  
+**Problem**: Romanian sites have dirty-but-recoverable data. Example: `"locuri_buget": "30 locuri (actualizat 15.09)"`. Pydantic validation will fail this as `int`, but it's recoverable via regex cleaning.
+
+**Better Flow**:
+```
+Extract (Dirty) → Raw Storage (always save) → Clean (text processing) → Validate → Gold CSV
+     ↓                    ↓                        ↓                ↓
+snapshots/          raw/ (unvalidated)      silver/ (cleaned)   processed/
+                                                 ↓
+                                           If fail: quarantine/
+```
+
+**Key insight**: Never reject data at the raw layer. Store everything, validate at the final export stage.
+
+### 4. **Content Hashing False Positives**
+**Problem**: Many Romanian sites include CSRF tokens, timestamps, or view counters in HTML that change on every request. Content hash will show "changed" when nothing meaningful changed.
+
+**Normalization before hashing**:
+```python
+def normalize_for_hash(html: str) -> str:
+    """Remove volatile elements before hashing"""
+    soup = BeautifulSoup(html, 'lxml')
+    # Remove CSRF tokens, timestamps, session IDs
+    for tag in soup.find_all(['input', 'meta']):
+        if tag.get('name') in ['csrf_token', 'timestamp']:
+            tag.decompose()
+    return str(soup)
+```
+
+### 5. **UCV Scraper Abstraction Leak**
+**Risk**: With 12 faculties having different CMSs, a single `ucv/scraper.py` with config overrides will become 600 lines of `if faculty_slug == 'feaa': ... elif faculty_slug == 'ace': ...`.
+
+**Safer Pattern** (Polymorphic per faculty):
+```
+execution/scrapers/ucv/
+├── __init__.py              # Factory logic
+├── base.py                  # shared HTTP logic, Romanian cleaning
+├── feaa.py                  # Faculty of Economics (WordPress layout)
+├── ace.py                   # Faculty of CS (Custom PHP tables)
+├── litere.py                # Faculty of Letters (static HTML)
+└── configs/
+    ├── feaa.yaml            # Selectors specific to feaa.py
+    └── ace.yaml             # Selectors specific to ace.py
+```
+
+The factory instantiates `FEAAScraper` or `ACECrawler` based on config, but each is a separate class inheriting from `UCVBaseScraper`. This scales better than one god-class with config overrides.
+
+### 6. **The `latest/` Symlink Atomicity**
+**Current**: `data/processed/latest/` → symlink to latest run  
+**Risk**: If your CSV writer crashes mid-write, `latest/` points to a half-written file. Downstream consumers get corrupted data.
+
+**Fix**: Write to temp, atomic move:
+```python
+# In json_to_csv.py
+output_dir = Path("data/processed/") / run_id
+temp_csv = output_dir / ".tmp_ucv_programs.csv"
+final_csv = output_dir / "ucv_programs.csv"
+
+# Write to temp
+pd.DataFrame(data).to_csv(temp_csv)
+
+# Atomic rename (POSIX guarantee)
+temp_csv.rename(final_csv)
+
+# Then update symlink atomically
+os.symlink(output_dir, "data/processed/latest.tmp")
+os.replace("data/processed/latest.tmp", "data/processed/latest")  # Atomic
+```
+
+## 📋 Recommended Starting Checklist (First 3 Days)
+
+**Don't build the factory yet.** Start concrete:
+
+1. **Day 1**: Manual HTML snapshots
+   ```bash
+   curl https://feaa.ucv.ro/admitere-2025 > tests/fixtures/feaa_admitere_2025.html
+   curl https://ace.ucv.ro/admitere > tests/fixtures/ace_admitere_2025.html
+   ```
+   Open them. Look at the HTML structure. Confirm they need different parsers.
+
+2. **Day 2**: Hardcoded FEAA scraper (no config, no factory)
+   - Target: Extract just program names and budget spots
+   - Output: `data/runs/run_001/snapshots/` + `data/runs/run_001/raw/`
+   - Don't use Pydantic yet—just dicts
+
+3. **Day 3**: Hardcoded ACE scraper (different structure)
+   - Notice what's different (table parsing vs div parsing)
+   - **Now** extract common patterns into `base.py`
+   - Build the factory only after you see the pattern
+
+**Success metric for Day 3**: You should have extracted real admission data from both faculties into JSON, and you should know whether one scraper class can handle both or if you need separate classes.
+
+## 🎯 Final Verdict
+
+**90% there.** The plan addresses the critical lifecycle issues (immutability, quarantine, provenance). The remaining 10% is avoiding premature abstraction of the UCV scraper—start with separate faculty implementations, merge them only if they truly share logic (they might not).
+
+**One last addition**: Add a `robots.txt` checker that logs warnings but doesn't enforce (Romanian academic robots.txt often block everything by default, but admission data is public information). You want to know if you're being blocked, but you don't want a strict robots.txt parser to prevent scraping public admission statistics.

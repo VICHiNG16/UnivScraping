@@ -1,0 +1,168 @@
+This is an **excellent, production-grade plan** that successfully synthesizes architectural patterns from multiple sources into a cohesive, scalable system. You've moved beyond "scraping" into **data pipeline engineering** with proper provenance, error isolation, and session tracking.
+
+However, I've identified **4 critical refinements** needed before implementation to avoid subtle scaling pitfalls:
+
+---
+
+## ✅ Strengths (What's Already Production-Ready)
+
+| Feature | Why It Matters |
+|---------|----------------|
+| **Session-based storage** (`data/runs/{run_id}/`) | Enables reproducibility, incremental updates, and audit trails |
+| **Error quarantine** (`errors/` directory) | Prevents single faculty failures from crashing entire university scrape |
+| **Factory pattern + centralized drivers** | Clean abstraction for adding new universities without touching core logic |
+| **Provenance metadata** (uid, content_hash, run_id) | Critical for change detection when UCV inevitably redesigns their site |
+
+---
+
+## ⚠️ Critical Refinements Needed (Before Coding)
+
+### 1. **UID vs Content Hash Semantics** (Most Important!)
+
+Your plan conflates two distinct concepts that **must be separated**:
+
+| Field | Purpose | Stability | Example |
+|-------|---------|-----------|---------|
+| `uid` | **Logical identity** of entity (e.g., "Faculty of Engineering") | **Stable** across content changes | `sha256("ucv.ro/faculty/engineering")[:16]` |
+| `content_hash` | **Fingerprint** of extracted data | **Changes** when content changes | `md5(json.dumps(program.dict()))` |
+
+**Why this matters**: 
+- To detect *when UCV changed admission spots*, you compare `content_hash` across runs for the **same `uid`**
+- If you only have one hash field, you can't distinguish "new faculty added" vs "existing faculty updated"
+
+**Implementation**:
+```python
+# execution/models/base.py
+class BaseEntity(BaseModel):
+    uid: str  # Stable logical ID (URL-based)
+    content_hash: str  # Changes when data changes
+    run_id: str
+    scraped_at: datetime
+    
+    @property
+    def has_changed(self, previous_run: 'BaseEntity') -> bool:
+        return self.content_hash != previous_run.content_hash
+```
+
+---
+
+### 2. **Directory Structure: Flat vs Hierarchical** (Choose One!)
+
+Your plan describes **two conflicting structures**:
+
+❌ **Conflicting descriptions**:
+- *"raw/faculties/{uid}.json"* (flat structure)
+- *"raw/{faculty_slug}/snapshot.html"* (hierarchical)
+
+✅ **Recommended approach**: **Hierarchical by faculty slug** (human-readable + debugging-friendly)
+
+```bash
+data/runs/ucv_20260128T143022/
+├── manifest.json
+├── raw/
+│   └── faculty_engineering/          # ← Human-readable slug (NOT uid)
+│       ├── snapshot.html            # Raw HTML backup
+│       ├── faculty.json             # Faculty entity (with uid + content_hash)
+│       └── programs/                # Nested programs
+│           ├── program_cs.json
+│           └── program_ai.json
+├── errors/
+│   └── faculty_theology_validation_error.json
+└── snapshots/                       # ← REMOVE THIS (redundant with raw/*/snapshot.html)
+```
+
+**Why hierarchical wins**:
+- Debugging: `ls data/runs/ucv_*/raw/faculty_engineering/` shows all assets for one faculty
+- Git-friendly: Changes isolated to specific faculty directories
+- Avoids UID obfuscation: `faculty_engineering/` > `a3f8b2c1d4e5/`
+
+---
+
+### 3. **Romanian-Specific Data Challenges** (Missing in Plan)
+
+UCV's data has **three Romanian-specific quirks** that break naive scrapers:
+
+| Challenge | Solution | Where to Implement |
+|-----------|----------|---------------------|
+| **Spots in PDFs** | UCV publishes admission spots in PDFs (not HTML) | `scrapers/ucv/pdf_parser.py` with confidence scoring |
+| **Diacritics normalization** | Must preserve BOTH raw (`Ştiinţe`) AND normalized (`Stiinte`) | `processors/text_normalizer.py` → dual storage fields |
+| **Language detection** | Programs list languages inline: `"Informatică (RO/EN)"` | `scrapers/ucv/utils.py` → regex parser with validation |
+
+**Critical**: Without PDF spot extraction, your dataset is **useless for prospective students** (spots = primary decision factor).
+
+---
+
+### 4. **Incremental Update Strategy** (Mentioned but Not Specified)
+
+Your plan mentions incremental updates but lacks the **decision logic**:
+
+```python
+# execution/base/scraper_base.py
+def should_scrape_faculty(self, faculty_slug: str, current_run_id: str) -> bool:
+    """Skip if content hasn't changed since last successful run"""
+    last_successful_run = self.get_last_successful_run()
+    
+    if not last_successful_run:
+        return True  # First run - scrape everything
+    
+    # Compare content_hash from last run vs current snapshot
+    last_content_hash = self.get_last_content_hash(faculty_slug)
+    current_snapshot = self.fetch_snapshot(faculty_slug)
+    current_content_hash = md5(current_snapshot)
+    
+    return current_content_hash != last_content_hash
+```
+
+**Without this**, you'll re-scrape 20 unchanged faculties every time UCV updates one PDF.
+
+---
+
+## 🚀 Revised Implementation Priority (Week 1)
+
+| Day | Task | Critical Path Reason |
+|-----|------|----------------------|
+| **1** | Draft `directives/scrape_ucv.md` with **PDF spot locations** | Without this, scraper misses critical data |
+| **2** | Implement `models/base.py` with **separate uid/content_hash** | Foundation for change detection |
+| **3** | Build `http_client.py` + `browser_manager.py` | All scrapers depend on these |
+| **4** | Create **hierarchical directory structure** (faculty_slug-based) | Avoids refactoring later |
+| **5** | Implement UCV scraper **for ONE faculty** (Engineering) | Validate full pipeline end-to-end |
+| **6** | Add **PDF spot extraction** for that faculty | Makes data actually useful |
+| **7** | Build CSV exporter + validation report | Close the loop |
+
+---
+
+## 📊 Final Architecture Recommendation (Simplified)
+
+```bash
+data/
+└── runs/
+    └── ucv_20260128T143022/          # ← run_id directory
+        ├── manifest.json            # Run metadata + stats
+        ├── raw/
+        │   └── faculty_engineering/ # ← HUMAN-READABLE SLUG
+        │       ├── snapshot.html    # Raw HTML (for debugging)
+        │       ├── faculty.json     # {uid, content_hash, ...}
+        │       └── programs/
+        │           └── program_cs.json
+        ├── errors/                  # Quarantined invalid data
+        └── logs/
+            └── scraper.log
+```
+
+**Key principle**: **Human-readable paths for debugging** > machine-optimized paths. You'll spend 10x more time debugging than running scrapers.
+
+---
+
+## ✅ Verdict
+
+Your plan is **90% production-ready** – the architecture is sound and incorporates best practices from multiple sources. With these 4 refinements (especially **separating uid/content_hash** and **hierarchical directory structure**), you'll avoid painful refactoring later.
+
+**Next immediate action**: Draft `directives/scrape_ucv.md` with explicit locations of:
+1. Faculty list URL
+2. Per-faculty program pages
+3. **PDF URLs for admission spots (2026 cycle)**
+4. Known quirks (e.g., "Theology faculty uses non-standard URL pattern")
+
+Without this human protocol, you'll waste days guessing selectors that don't exist. **Document first, code second.**
+
+Ready to draft the UCV directive document or Pydantic models with proper uid/content_hash separation?
