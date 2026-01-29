@@ -1,2725 +1,425 @@
-1st the prompt i gave it:
-# MISSION: Senior Architect Audit & Optimization PROJECT: UCV University Scraper (Phase 7 - Hybrid PDF Parsing) CONTEXT: I am building a high-precision data pipeline for university admissions (UCV - University of Craiova). The primary goal is creating a "Zero Garbage" RAG (Retrieval-Augmented Generation) dataset for a student-guidance chatbot. We prioritized "Data Hygiene" (absolute zero noise) over "Recall" (total count), but we just finished Phase 7 (Hybrid PDF Parsing) to restore coverage for difficult faculties like 'Agronomie'. PROVIDED ARCHITECTURE: 1. SCRAPER (Iron Dome): Uses strict heuristics to reject fuzzy HTML nodes that resemble footers, ads, or navigation. 2. HYBRID PDF PARSER (V7): A tiered extraction engine: - Tier 1: Table Extraction (Precision for structured ACE faculty). - Tier 2: Text/Regex Fallback (Recall for list-based Agronomie faculty). 3. MATCHER (Fusion Engine): A multi-PDF retry loop that handles scanned PDFs by automatically falling back to digital backups and "synthesizing" records when HTML sources are empty. 4. RAG CONVERTER: Normalizes raw objects into narrative "Advisor Pitches" for embeddings. CHALLENGES / YOUR GOAL: 1. DATA RECOVERY: We have a "Multi-PDF Retry Loop" in matcher.py. Audit this logic. Is there a more efficient way to score and select the "Truth" PDF when multiple conflicting sources exist? 2. REGEX ROBUSTNESS: We just fixed a "Catastrophic Backtracking" hang in pdf_parser.py. Examine the regex patterns. Are there edge cases in Romanian (diacritics/layout changes) that could still break the parser? 3. SCHEMA ENRICHMENT: Look at rag_converter.py. How can we improve the "Narrative Pitch" to make the embeddings more semantically rich for students asking about careers? 4. ZERO GARBAGE: Review the blacklist in pdf_parser.py and scraper.py. How can we make the "Iron Dome" more intelligent (ML or better heuristics) without adding hard-coded blacklists for every new faculty? TASK: - Identify architectural bottlenecks. - Propose "Phase 8" optimizations. - Point out any "Code Smells" in the Python implementation (matcher, parser, scraper). - Suggest a way to automate "Last Admission Grade" extraction, which is currently missing. Act as a Senior Data Engineer & RAG Architect. Do not hold back on criticism.
-the thinking:
-Pro thinking
-Evaluating architectural bottlenecks and code issues
-
-I need to identify potential bottlenecks and propose optimizations for Phase 8. I'll look for code smells and suggest automation for missing admission grade extraction. There seems to be an indentation issue in matcher.py, causing unreachable code after _infer_career_paths. I’ll inspect the full file to confirm.
-Evaluating data recovery, regex, schema, and optimization
-
-Always show details
-from pathlib import Path, PurePosixPath
-import textwrap, json, re, os, sys, pandas as pd
-
-Reviewing matcher.py code
-
-Alright, I’m going to take a closer look at matcher.py. I need to confirm the issues I noticed earlier, like the indentation problem and the unreachable code after _infer_career_paths. Let me open up and review the complete file to better understand the code and verify everything.
-Reading contents of matcher.py
-
-Always show details
-matcher_path = Path("/mnt/data/matcher.py")
-print(matcher_path.exists(), matcher_path)
-print(matcher_path.read_text(encoding="utf-8")[:2000])
-
-Analyzed
-Extracting file content snippet
-
-Always show details
-print(matcher_path.read_text(encoding="utf-8")[2000:4000])
-
-Analyzed
-Displaying text from file segment
-
-Always show details
-print(matcher_path.read_text(encoding="utf-8")[4000:6000])
-
-Analyzed
-Reading full remainder of code
-
-It looks like the line got truncated when reading, possibly due to a newline in the regex substitution. I should make sure to read and examine the full remainder of the code to get a complete view of what might be going wrong. I’ll pull in the rest of the code to analyze it properly.
-Reading and truncating file content with regex
-
-Always show details
-print(matcher_path.read_text(encoding="utf-8")[6000:8000])
-
-Analyzed
-Displaying text from file range
-
-Always show details
-print(matcher_path.read_text(encoding="utf-8")[8000:10000])
-
-Analyzed
-Re-running Python code to confirm error
-
-The code execution didn’t succeed, possibly because there was a print statement with a substring that triggered an out-of-range error. But that shouldn't have caused an issue. I’ll try running the code again to confirm what's going wrong and catch any specific error message.
-Diagnosing Python execution error
-
-Always show details
-text = matcher_path.read_text(encoding="utf-8")
-len(text)
-
-Analyzed
-Printing a larger range with correct slicing
-
-Okay, so to avoid any errors, I'll print a range from 9500 to 11000 with the correct slicing in place. This should help me get the right chunk without triggering any out-of-range issues again. Let’s give it a try and see how it goes!
-Slicing and printing text segment
-
-Always show details
-print(text[9500:11500])
-
-Analyzed
-Displaying text segment
-
-Always show details
-print(text[11500:13500])
-
-Analyzed
-Displaying text segment
-
-Always show details
-print(text[13500:15500])
-
-Analyzed
-Continuing from here
-
-Alright, it's time to move forward. I’ll keep going and pick up where I left off, making sure to stay on track and handle the next steps properly. Let’s move ahead and see what needs to be done next!
-Displaying text segment
-
-Always show details
-print(text[15500:17634])
-
-Analyzed
-Identifying critical indentation bug
-
-There's a clear indentation issue: the for loop that processes results is incorrectly indented under the _infer_career_paths return statement, making it unreachable. This blocks the logic for matching and updating HTML programs, and only the PDF synthesis works. The bug prevents combining PDF data with HTML data. This needs immediate attention.
-Identifying code formatting issues and hard-coding concerns
-
-There’s an indentation inconsistency in the prog dictionary. While Python doesn’t care about indentation in dictionaries, the readability is poor due to misaligned keys like "entity_type" and "source_type." Also, the current_year = "2026" is hardcoded in the DataFusionEngine; this should derive from the current date or a config instead.
-Clarifying potential issues with "grile" and PDF handling
-
-The terms "grile" and "ghid" might relate to exam questions rather than program spots, which could affect how data is extracted. Also, the scraper isn't populating local_path for PDFs, but matcher.py expects it. I need to check if there's a separate process that handles the download and sets local_path.
-Identifying potential issues with local_path and function complexity
-
-The matcher might fail if the local_path isn’t added later. It's unclear if the pipeline does this, but it’s a hidden dependency. Also, UCVScraper._extract_from_snapshot has redundant code and early return statements that make certain checks unreachable, making them dead code. This could lead to unnecessary complexity in the function.
-Improving program detection and PDF selection
-
-The system currently relies on hard-coded keyword heuristics, which are not scalable. A better approach could use structural features or DOM context to detect programs, focusing on headings like "Admitere" or "Master". Alternatively, machine learning could help classify nodes, and PDF selection can be improved by scoring based on parse success, row count, and program name matches with HTML. This dynamic approach would be more efficient than relying solely on link text.
-Improving PDF parsing with efficiency and accuracy
-
-To improve the existing approach, we can treat the task as a ranking problem: generate a list of candidates with prior scores, then quickly scan the first page to compute features. Caching results and implementing a PDF fingerprint could also help avoid redundant parsing. Additionally, there’s room to improve the regex robustness, particularly in how names and special characters are handled in the text extraction patterns.
-Refining regex for handling variations in text
-
-It seems the current regex might miss diacritical variations, such as cedilla forms of Romanian characters like "Ş" and "Ţ." They could include both sets of characters. Patterns like "Locuri cu taxă" and "Locuri la buget" might also fail due to missing optional words. I wonder if optional phrases, like "(cu\s+)?" and "(?:la\s+)?", could improve matching. Additionally, it might miss patterns like "Locuri bugetate." Correcting these could improve accuracy.
-Fixing regex for matching program names and numbers
-
-The current regex structure seems to struggle when matching uppercase names, especially if they contain diacritics or multiple words in all caps. Additionally, it misapproaches the assignment of budget and tax numbers, as it might confuse total numbers with valid budget values. This could be resolved by restructuring the pattern or using allowlists and named groups with more context.
-Optimizing PDF extraction and automation
-
-The extraction process could benefit from breaking text into lines and applying simpler patterns to avoid heavy backtracking, especially with large documents. Handling diacritical marks through Unicode normalization, and improving the automation for extracting the last admission grade will require additional parsing steps. We'll also optimize the architecture for performance by adding concurrency and caching. Additionally, improving the parser and enriching the data pipeline will enhance efficiency and accuracy overall.
-Crafting a structured response and examining code
-
-I'll organize the response into sections: an executive summary, critical issues like bugs, bottlenecks, and a Phase 8 plan with prioritized tasks. I’ll also include design proposals, a code smell list, and outlines for extracting last admission grades. I'll review the relevant files (pdf_parser.py, scraper.py, etc.) to identify any additional issues and propose improvements using dataclasses and scoring features, backed by tests.
-Identifying and addressing critical code bugs and inefficiencies
-
-Always show details
-from pathlib import Path
-scraper_text = Path("/mnt/data/scraper.py").read_text(encoding="utf-8")
-pdf_text = Path("/mnt/data/pdf_parser.py").read_text(encoding="utf-8")
-rag_conv_text = Path("/mnt/data/rag_converter.py").read_text(encoding="utf-8")
-prog_model_text = Path("/mnt/data/program.py").read_text(encoding="utf-8")
-scraper_base_text = Path("/mnt/data/scraper_base.py").read_text(encoding="utf-8")
-print(len(scraper_text), len(pdf_text), len(rag_conv_text), len(prog_model_text), len(scraper_base_text))
-
-Analyzed
-Viewing first 3000 characters of PDF text
-
-Always show details
-print(pdf_text[:3000])
-
-Analyzed
-Extracting surrounding text patterns
-
-Always show details
-# Print the regex patterns section around _extract_via_text
-start = pdf_text.find("p1 =")
-print(pdf_text[start:start+2000])
-
-Analyzed
-Inspecting scraper.py for issues
-
-I'll go through scraper.py to check for blacklists, duplicates, and any potential issues like repeated definitions (e.g., PDF_ONLY_FACULTIES). I'll also look out for code smells, such as "pass" statements with comments or any other oddities that could indicate inefficiencies or unnecessary complexity.
-Inspecting scraper.py for issues and duplicates
-
-Always show details
-import re
-# Search for PDF_ONLY_FACULTIES occurrences in scraper.py
-for m in re.finditer("PDF_ONLY_FACULTIES", scraper_text):
-    print(m.start())
-
-Analyzed
-Checking for duplicates and redundancy
-
-There seem to be many occurrences, possibly duplicates or redundant code. I’ll start by examining the first instance at line 6619 to understand the context better. That may help me identify if there’s unnecessary repetition or if the code can be optimized.
-Extracting text for potential duplicates and redundancies
-
-Always show details
-print(scraper_text[6500:7200])
-
-Analyzed
-Checking for redundant occurrences in loops
-
-The other occurrences might be redundant, especially since they're within loops. It makes sense to check around line 8800 to confirm. This might help identify where unnecessary repetition is happening and guide me on how to optimize the code for better performance.
-Extracting text from scraper output
-
-Always show details
-print(scraper_text[8700:9100])
-
-Analyzed
-Investigating redundancy at third occurrence
-
-There seems to be redundancy again. Let's check the third occurrence at line 10741 to confirm any unnecessary repetition. Identifying this could help streamline things and improve performance by removing any redundant code or logic that's slowing things down.
-Checking redundant text in scraper output
-
-Always show details
-print(scraper_text[10650:10950])
-
-Analyzed
-Debugging issues with program and faculty models
-
-The code's logic is difficult to follow, especially with the early return, making it unclear. The HTML parser’s level detection based on the URL is risky, as it might classify wrong if certain keywords are missing. The duration_years also feels too rigid. The program_uid could cause duplicates, and the faculty_uid for the Program model might need to be corrected. I'll need to check the Program model in program.py to understand better.
-Improving RAGConverter heuristics and career path logic
-
-The logic for setting faculty_uid seems consistent, though they pass slug instead. In RAGConverter, skipping programs when the entity type is not "program" makes sense. However, the career path classification is too simplistic, especially with ambiguous keywords like "calc". Using a proper taxonomy would be more accurate. Also, filtering noisy tokens works, but leaving things like "master" may still confuse the process.
-Improving data handling consistency
-
-For keyword extraction, they should include stopword removal and synonyms. The spots_text logic can be confused by missing spots, so unifying it with PDF extraction could help. Constants like admission_year and scraped_at need dynamic values. There's also a mismatch in how the language field is handled between models. Lastly, the last_admission_grade field is defined in the Program model but isn't used anywhere.
-Identifying architectural bottlenecks
-
-To improve the system, we need to address some key bottlenecks:
-
-    Centralize faculty-specific logic in the config instead of scattering it.
-
-    Decouple the scraper, PDF downloader, and matcher.
-
-    Implement typed dataclasses or Pydantic for better error handling.
-
-    Standardize logging, as it’s inconsistent.
-
-    Optimize PDF parsing by reducing heavy pdfplumber usage.
-
-    Improve table extraction accuracy and performance.
-
-    Refine text extraction for better efficiency.
-
-Optimizing processing and future improvements
-
-Reading all pages might be heavy for each candidate. Regex patterns can become slow, and fuzzy matching could be slow as well, given the volume of data. We might optimize using indexing and extraction functions. To improve data saving, batch files rather than overwriting. The manifest writing needs better structuring.
-
-For Phase 8, the focus should be on fixing bugs, implementing PDF scoring, and improving the parser. Additionally, we can extract "admission grades" and enhance validation using a classifier approach or even transformer models for better precision.
-Proposing a "Truth PDF selection" process
-
-To improve PDF selection and parsing reliability, I suggest each PDF or HTML page be treated as a "Document" entity with metadata and global caching. Implementing pre-scoring, sniff parsing, and candidate evaluation steps will help choose the best quality PDF, reducing noise. Combined scoring will optimize output quality and parsing efficiency.
-Improving PDF selection and career data structuring
-
-To enhance the PDF selection, I suggest ranking candidates by year and key clues like "ANEXA," and verifying the number of programs match known data. For career data, I propose creating rich embeddings with structured fields like program name, study mode, and career paths, ensuring source authenticity with disclaimers for clarity.
-Optimizing embedding structure and reducing noise
-
-I’m considering adding a structured YAML-like format for embeddings, including keywords, diacritics variations, and excluding stopwords. Also, using classifiers combined with heuristics seems useful for extracting content while minimizing noise. I could propose a more deterministic approach, focusing on supervised classification and quality gates to avoid unnecessary data. Finally, addressing architectural inefficiencies like redundant config loading is necessary.
-Identifying inconsistencies and areas for improvement
-
-There are a few inconsistencies I need to address: JSON vs. Pydantic model handling, field naming differences (e.g., "Romanian" vs. "ro"), and the programs_dir and results logic. Additionally, the bug with the rag_dataset.json (only covering ACE and Agronomie) suggests pipeline issues. I'll also review related architecture documents for deeper context.
-Evaluating program data extraction pipeline and design
-
-Always show details
-arch_v6 = Path("/mnt/data/architecture_v6_system_overview.md").read_text(encoding="utf-8")
-walk_v7 = Path("/mnt/data/walkthrough_v7.md").read_text(encoding="utf-8")
-print(arch_v6[:1000])
-print("---")
-print(walk_v7[:800])
-
-Analyzed
-Improving dataset cleaning and sanitization
-
-It looks like the dataset has some messy entries, like names with spot numbers included, which suggests the HTML parser didn't clean appropriately. We should separate the spot numbers from the program names, storing them in the right fields. The spots_raw field is also problematic because it contains multiple programs. This needs improvement.
-Inspecting dataset for cleaning and normalization issues
-
-Always show details
-import json, pandas as pd
-rag_data = json.loads(Path("/mnt/data/rag_dataset.json").read_text(encoding="utf-8"))
-len(rag_data), rag_data[0].keys()
-
-Analyzed
-Inspecting messy entry for name issues
-
-I should take a closer look at the entry with the messy program name that includes spot numbers. I need to check how it's being parsed and whether the cleaning process missed properly separating spot information from the program name itself. This will help improve the data's quality.
-Inspecting entries with messy names
-
-Always show details
-for item in rag_data:
-    if "locuri" in item["name"].lower():
-        print(item["name"])
-
-Analyzed
-Cleaning up extracted program details
-
-It looks like the extraction process captured the entire line, including spot information. They tried splitting at commas or semicolons, but in this case, the line didn't contain those. I think using regex to clean the "(\d+ locuri...)" part would solve this. The spots_budget and spots_tax fields are set, but many entries have spots_budget as null because the extraction didn’t capture that part — possibly due to pattern mismatches.
-Addressing HTML extraction and Phase 8 fix
-
-The HTML extraction seems messy, but maybe they intend to rely on PDFs for the spot data. However, due to the matcher bug, PDFs aren't being fused properly, so Phase 8 must address that. Regarding the user request for "Audit & Optimization" (Phase 7 - Hybrid PDF Parsing), since they've provided code, I don't need to browse. It's internal, so not about current events. While I could browse UCV pages to check for patterns, the user didn't ask for that. They might benefit from knowing typical PDFs, like how to parse admission grades, but with no internet, that’s tricky. However, my environment allows some web access — so, I’m thinking of using that option.
-Using web.run to explore grade extraction
-
-I could use web.run to explore UCV’s admission grade extraction patterns, maybe see a typical PDF layout. This would be useful, especially since the user is asking for last admission grade suggestions. Since it’s a niche, up-to-date request, checking their site could help by showing PDFs with grades to parse.
-Searching for admission PDFs to refine grade extraction
-
-Since it's January 2026, there might be 2025 admission results available. I'll use web.run to check for UCV PDFs with admission results, focusing on how they present grades. This will help refine regex patterns. I’ll also search for common PDF names like "cifra de scolarizare" to tailor the approach.
-Browsing for UCV admission PDF patterns
-Analyzing UCV PDFs for last admission grade extraction
-
-The search results show relevant UCV pages, including PDFs containing admission data, such as ACE's 2025-2026 results. I can extract the "last admission grade" from these documents or obtain it from the list by sorting candidates by grade. It’s also possible to rely on portal data or official PDFs for accuracy.
-Considering parsing options for UCV results
-
-The output from the portal looks truncated, possibly due to dynamic content or JavaScript. It might require interacting with forms or clicking links to access more data. Since it's not critical to implement right now, we can start by suggesting approaches—such as examining the PDF "cifra de scolarizare" structure for parsing data.
-Exploring PDF extraction for last admission grade
-
-We could open a PDF like "ACE_Licenta_cifra_scolarizare_admitere_2025_2026.pdf" from the search results to assess its layout for data extraction. Additionally, a PDF listing admitted candidates’ grades might provide the last admission grade. I'll refine the search and check for the specific term "media ultimului admis ucv 2025."
-Proposing approach for accessing and parsing admission data
-Proposing automatic extraction for admission grade
-
-The search results show PDFs with admitted candidates and their "Medie" column, such as "EFS_L_RUE_7_2025-EFSS-B.pdf." We could calculate the last admission grade by parsing these PDFs based on program, type (Buget/Taxa), and session year. The "Lista candidaților ADMIȘI" section seems useful to integrate with the pipeline.
-Proposing PDF-based algorithm for extracting last admission grade
-
-I suggest an algorithm to automate the extraction of the last admission grade from PDFs. We would identify PDFs containing admission data, parse headers, and extract candidates' grades from columns labeled "Medie". This process includes handling multiple sessions and selecting the latest update by timestamp for accuracy. Phase 8 should integrate this.
-Proposing an automated stage for admission grade extraction
-
-Let’s add a new stage called AdmissionResultsCollector, which will process PDFs or scrape the EvStud portal. We’ll extract candidate data using pdfplumber (or other libraries, if needed) for cleaner results. The core task is identifying grades, particularly by parsing average values in columns with headers like "Medie". We'll use regex to avoid messiness from monospaced tables.
-Proposing improvements for admission grade extraction and career context
-
-We can use heuristics to calculate the last admission grade by identifying the minimum grade from "Admis (Pb)" and filtering by criteria like "ADMIȘI" status. We should also unify forms and include structured metadata for easier retrieval. For career queries, incorporating "last admission grade" and contextual data will enhance the narrative.
-Crafting a detailed response plan
-
-The final response will consist of sections:
-
-    Discussing critical bugs in the matcher, missing coupling, and inconsistent fields.
-
-    Proposing data recovery with an improved scoring and selection algorithm.
-
-    Strengthening PDF parsing and regex patterns for better robustness.
-
-    Enriching schema for the RAG with clear fields for stability.
-
-    Enhancing the filtering process with a multi-stage approach for increased accuracy in parsing.
-
-    Automating last admission grade extraction and updating the RAG converter.
-
-    Outlining the roadmap for Phase 8 development, tests, and bug fixes.
-
-Proposing Improvements for Scraper and RAG pipeline
-
-In the current code, there are a few issues, like large hard-coded keyword lists and mixing responsibilities between PDF discovery and program parsing. Additionally, the pipelines don't clearly separate facts from inferred data. Some improvements include adding document type classification, using a persistent registry with versioned document info, and implementing document name hashing for fuzzy matching. Plus, we need to establish clearer year mappings for academic timelines and update the pipeline year handling.
-Improving date and document handling strategy
-
-We should use academic year fields like "2025-2026" instead of single years and compute from document names. The academic year logic in the code could be more dynamic, updated from the environment, or run configuration. Some docs include both years, but for future years, we need to ensure scoring reflects what’s currently active. Also, potential improvements for Phase 8 include better module separation, scoring, caching, and restructuring. We’ll address bottlenecks and clarify the retry logic for PDFs, pointing out issues with local_path usage.
-Identifying bugs and improvement suggestions
-
-I notice that the scraper adds a slug to the "successful" list even if an error occurs, which is a bug since the manifest always shows success. We should update this to track successes per page and append failures. Also, the code redundantly loads the config in the run loop. Let's address these issues.
-Improving domain context and filtering
-
-The program uses a noisy domain context because "current_domain" gets set to a long string from the text after "Domeniul", which includes irrelevant program details. To fix this, we could refine domain extraction by using a more targeted pattern like "Domeniul: <name>" or capturing up to a comma. That should help clean things up.
-Improving pdf parser and converter stability
-
-The current pdf parser has some issues, like fallback errors in table column mapping (for budget and tax). It could be enhanced by using more reliable column header matching, ensuring numeric checks to avoid noise. The converter could benefit from adding source and metadata, and using a more stable ID format for program identification. Also, normalizing language and year could improve consistency.
-Phase 8 proposals and improvements
-
-To improve the RAG dataset, I propose cleaning the program names and standardizing keywords and punctuation. We could refine the "Truth PDF selection" algorithm using multi-signal scoring for better quality, including features like match coverage and year. I'll also add improvements to the Iron Dome classifier to identify valid program candidates with better context. For PDF parsing and validation, refining the classification process and introducing incremental improvements will help enhance accuracy. Lastly, addressing code smells like unused imports will help streamline the code base.
-Extracting Last Admission Grades from UCV Portals and PDFs
-Thought for 15m 17s
-
-Done
-
-The response:
-Below is the blunt Phase‑7 audit you asked for. I’m going to be direct because you’re already doing the hard part (hygiene-first), and the remaining problems are mostly “engineering correctness + selection science”.
+Below is a “Scalability Phase” roadmap grounded in what your code is doing **today** (UCV only) and what will break/slow down when you go to **50+ universities / 200+ faculties**.
+
+I’m going to reference concrete pressure points I see in the files:
+
+* `run_pipeline_v4.py` hard-wires `UCVAdapter()` and runs only `BaseScraper` (no adapter factory yet). 
+* `BaseScraper` is adapter-driven for HTML + PDF discovery/download, but it’s still **single-threaded/synchronous** and has no pagination/dynamic-fetch abstraction. 
+* Enrichment (`DataFusionEngine`) is currently **UCV-coupled** (imports UCV PDF parser directly) and has at least one “scale blocker” bug + hard-coded year logic.
+* UCV PDF parsing is already a nice “hybrid strategy” (table extraction → text/regex fallback, page provenance), which is exactly the kind of reusable primitive you’ll want cross-university. 
+* Your `Program` schema and evidence fields are already designed for multi-source merging. 
+* Your semantic “Iron Dome” validator is a good generic hygiene layer to keep across all sites.
 
 ---
 
-## 1) Critical blocker: your Fusion Engine is functionally broken (regular mode)
+## 1) Architecture critique: is `UniversityAdapter` robust enough for 50 universities?
 
-### What’s happening
+### What’s good already
 
-In `matcher.py`, the enrichment path that should update **existing HTML programs with PDF spots** never runs.
+You’ve achieved the most important decoupling: `BaseScraper` doesn’t know DOM structure and delegates university-specific parsing and PDF link discovery to the adapter.
 
-You create the matcher and compute `results = matcher.match_all()`, then… nothing. The loop that applies matches is accidentally placed **inside `_infer_career_paths()` after a `return`**, making it unreachable and also referencing out-of-scope variables (`results`, `pdf_url`, `slug`). 
+That’s the correct direction for 50+ sites.
 
-**Impact:**
-Your dataset shows exactly this symptom: most ACE programs remain with `spots_budget/tax = null` despite having spot info in HTML snippets and/or intended PDF enrichment. 
+### Where it will hurt at 50 universities
 
-### Fix (non-negotiable)
+#### A. The adapter boundary is “HTML-only”, but the real variability is **PDF parsing**
 
-Move the “apply match results” loop back into `_fuse_data()` and keep `_infer_career_paths()` pure.
+Your interface has `parse_grades()` but **no equivalent for parsing spots PDFs**. Spots extraction is handled in `DataFusionEngine` using `PDFParser()` imported from the UCV path. That will not scale: every new university with a PDF quirk forces edits in the enrichment engine instead of “just writing a new adapter/plugin”.
 
-Here’s the minimal structural correction:
+**Recommendation:** make PDF parsing pluggable through the adapter boundary:
 
-```python
-def _fuse_data(self, slug: str, programs: List[Dict], pdf_rows: List[Dict], pdf_url: str):
-    if not programs and pdf_rows:
-        ...  # PDF-only synthesis (keep)
-        return
+* Add either:
 
-    matcher = RomanianProgramMatcher(programs, pdf_rows)
-    results = matcher.match_all()
+  * `get_spots_pdf_parser()` / `parse_spots(pdf_path)`, or
+  * a more general `get_document_parsers()` returning parsers keyed by doc type (`SPOTS`, `GRADES`, maybe later `FEES`, `CALENDAR`, etc.)
 
-    for res in results:
-        prog = res["program"]
-        match = res["match"]
-        score = res["score"]
-        status = res["status"]
+This keeps the “university differences” in one place.
 
-        if match and score > 0.65:
-            prog["spots_budget"] = match.get("spots_budget")
-            prog["spots_tax"] = match.get("spots_tax")
-            prog.setdefault("metadata", {})
-            prog["metadata"].update({
-                "pdf_match_score": score,
-                "pdf_match_name": match.get("program_name"),
-                "pdf_source": pdf_url,
-                "match_status": status,
-            })
-            self._save_program(slug, prog)
+#### B. Pagination / multi-page flows are not representable
+
+Right now, faculty pages are “whatever URLs you put in YAML” (`discover_faculties()` returns dicts with `urls`).
+
+That works for UCV because you listed both `/admitere/licenta` and `/admitere/master` per faculty in YAML. 
+But for many universities, program lists are:
+
+* paginated tables (“page=1,2,3…”),
+* JS-rendered,
+* filtered by query params,
+* behind “accordion → fetch JSON” patterns.
+
+Your adapter can’t tell `BaseScraper` to fetch “next pages” because it only receives an `html` string and no fetch handle.
+
+**Recommendation:** add an optional pagination hook/capability:
+
+* `discover_additional_pages(html, url, faculty_slug) -> list[PageRequest]`
+* or model your faculty as a plan (`FacultyPlan`) that can yield pages to fetch.
+
+Keep it optional (default empty list) so most adapters stay simple.
+
+#### C. Fetch strategy (static HTTP vs browser) isn’t a first-class concept
+
+`BaseScraper` instantiates a `BrowserManager`, but never uses it in the shown code path.
+So today you are effectively “requests-only”.
+
+At 50 universities, you will inevitably hit:
+
+* Cloudflare-ish “JS required” pages,
+* cookie banners that block content unless accepted,
+* content in script tags (JSON-LD, JS variables),
+* pages that require scroll / dynamic load.
+
+**Recommendation:** introduce `FetchMode` as adapter-driven metadata:
+
+* `get_fetch_mode(url) -> Literal["http","browser"]` (default `"http"`)
+* or `get_page_requests()` with each URL annotated with fetch mode & timeouts.
+
+This lets you keep a simple pipeline while unlocking “browser only when needed”.
+
+#### D. `Program` construction responsibilities are split awkwardly
+
+UCVAdapter creates `Program` entities with a placeholder `run_id="adapter_run"` and internally recomputes `faculty_uid` hashing. Then `BaseScraper` overwrites `run_id`.
+
+That’s a coupling smell:
+
+* if UID rules change, you must update both adapter and base.
+* run context (run_id, faculty_uid) belongs to the pipeline, not site parsing.
+
+**Recommendation:** change adapter output to **data-only** or pass a `ScrapeContext`:
+
+* Option 1 (clean): adapter returns `list[dict]` “program candidates” and BaseScraper builds `Program` (single source of truth for UID + run_id).
+* Option 2: keep returning `Program`, but pass `run_id` + `faculty_uid` into `extract_programs_from_html(...)`.
+
+#### E. Enrichment engine is not adapter-driven (and has scale blockers)
+
+`DataFusionEngine` currently:
+
+* imports `PDFParser` from `execution.scrapers.ucv.pdf_parser` (UCV-specific)
+* has a hard-coded year in `_identify_spots_pdf`: `PDFTruthRanker(admission_year=2026)` instead of using `self.admission_year` 
+* contains a leftover reference to `pdf_rows` that is undefined (will crash when that path is hit).
+
+Before scaling, you want:
+
+* a generic enrichment runner that uses **adapter-provided parsers**, not UCV imports
+* consistent ranker configuration (one place, not duplicated)
+
+This is the biggest architectural bottleneck to “50 adapters”.
+
+---
+
+## 2) Factory pattern: managing 50+ adapter class files dynamically
+
+### Keep per-university folders (your current pattern is good)
+
+Your current structure (`execution/scrapers/ucv/adapter.py` + `config.yaml`) is exactly what you want at 50 universities: it “namespaces” quirks and makes ownership obvious.
+
+So I’d keep:
+
+```
+execution/
+  scrapers/
+    ucv/
+      adapter.py
+      config.yaml
+      pdf_parser.py          # optional, if needed
+      tests/                 # snapshots + unit tests
+    ub/
+      adapter.py
+      config.yaml
+    upb/
+      ...
+    registry.py
 ```
 
-Also: **don’t default missing spots to `0`** (you currently do that). Zero is “false fact”, not “unknown”. Keep `None` unless proven. 
+### Add a registry + factory (simple internal “plugin system”)
 
----
+Right now the runner imports `UCVAdapter` directly. 
+At 50 universities you want:
 
-## 2) Data Recovery: your “Multi‑PDF Retry Loop” needs a Truth PDF ranker (not just link-text heuristics)
+* CLI: `python run_pipeline.py --uni ucv`
+* or batch: `python run_all.py --unis ucv,ub,upb`
 
-### What you have now
+**Minimal approach (recommended): decorator registry**
 
-`_identify_spots_pdf()` scores candidates mostly from URL/text keywords and **hard-coded years** (`current_year = "2026"`). 
-Then `_enrich_faculty()` tries candidates sequentially until one yields rows. 
-
-### Why this is a bottleneck
-
-1. **Hard-coded year = future maintenance debt** and will silently break coverage every January. 
-2. Keyword scoring is too coarse:
-
-   * You treat `ghid`, `grile`, `pliant` as “positive” alongside `cifra de școlarizare`. Those are not equivalent evidence.
-3. You’re selecting “truth” without measuring **extraction quality** or **consistency** against expected programs.
-4. Sequential retry parses full PDFs repeatedly → slow and wasteful (especially if you add more faculties).
-
-### Phase‑8 optimization: PDF Truth Selection = “Rank by Evidence”, not just filenames
-
-Build a `PDFTruthRanker` that assigns a score using **three layers of signals**:
-
-#### A) Link/metadata signals (cheap)
-
-* Year in URL/text (dynamic year from run date)
-* Strong phrases: `"cifra de școlarizare"`, `"locuri buget"`, `"locuri cu taxă"`
-* Negative phrases: `"cazare"`, `"burse"` (keep)
-* File properties: page count, file size
-
-#### B) Extraction-quality signals (medium cost, fast preview)
-
-Run a **preview parse** on first 1–2 pages:
-
-* `text_density = len(extracted_text) / pages`
-* `table_count`
-* `rows_extracted_preview`
-* `%rows_with_numeric_spots`
-* `%rows_failing blacklist`
-
-This alone detects “scanned poster with no text” vs “actual table doc”.
-
-#### C) Consistency signals (high value if HTML programs exist)
-
-If you have HTML program names:
-
-* Compute match coverage:
-  `coverage = (#HTML programs matched > threshold) / (#HTML programs)`
-* Use average best-match score.
-* Prefer candidate that maximizes coverage *and* spot completeness.
-
-**Decision rule:** pick the PDF with the best combined score; only fall back to #2 if score is below a confidence threshold.
-
-### Bonus: caching
-
-Hash the PDF bytes and cache parse results + features:
-
-* Avoid re-parsing the same PDF across retries / reruns.
-* Store `pdf_features.json` beside the PDF for forensic debugging.
-
----
-
-## 3) Regex robustness: you fixed catastrophic backtracking, but Romanian/layout edge cases can still break recall
-
-Your Tier‑2 regex fallback in `pdf_parser.py` is bounded now (good), but it’s still fragile in real Romanian PDFs. 
-
-### Key edge cases you’re currently exposed to
-
-#### A) “Locuri” phrasing variants you don’t cover
-
-You mostly look for `Locuri buget` and `Locuri taxă/taxa`. Real documents often use:
-
-* “locuri **bugetate**”
-* “locuri **finanțate de la buget**”
-* “locuri **fără taxă**”
-* “locuri **cu taxă**”
-* “taxă” appears as “taxă”, “taxa”, “taxă de școlarizare”
-
-Your p1 pattern is too specific here. 
-
-#### B) Program names with punctuation / digits / parentheses
-
-Your capture group for name in p1 is:
-`[A-Za-zȘȚĂÂÎșțăâî \-]+`
-
-That **fails** or truncates on:
-
-* parentheses: “(IF)”, “(ID)”
-* commas
-* ampersands / slashes
-* digits / roman numerals
-* English words with punctuation (common for CS programs)
-
-
-
-#### C) Line-break chaos from PDF text extraction
-
-Your p2 is line-based but not DOTALL, so it only matches if everything stays on one extracted line. Many PDFs will split “buget” and “taxă” across line breaks → p2 misses. 
-
-#### D) False positives: “DISCIPLINA” ≠ program
-
-Your p3 fallback (“DISCIPLINA: …”) is how you recovered Agronomie. 
-But that’s conceptually dangerous: in many contexts it’s **exam subject**, not program. If you keep it, mark it as:
-
-* `source_type = pdf_exam_discipline`
-* `accuracy_confidence = low`
-* require an additional validation signal (e.g., it appears alongside “program/master/licență” in same doc)
-
-### Phase‑8 parser hardening (without reintroducing backtracking)
-
-Recommendations:
-
-1. **Normalize aggressively once**:
-
-   * Unicode NFKC
-   * unify hyphens
-   * collapse whitespace
-   * build a parallel “ascii-folded” version for keyword checks
-2. **Parse per page** not a single huge `full_text`:
-
-   * better provenance (page index)
-   * reduces pathological regex scanning
-3. Replace p1 with a “label → value” approach:
-
-   * detect “Programul/Specializarea/Domeniul”
-   * then scan a bounded window for budgets/tax variants
-4. For spots, detect numeric patterns with context instead of fixed wording:
-
-   * find `(\d{1,3})` near “buget|bugetat|finanțat|fără taxă”
-   * find `(\d{1,3})` near “taxă|taxa|cu taxă”
-
----
-
-## 4) Schema enrichment: your “Advisor Pitch” is too shallow for career-centric student queries
-
-Right now `rag_converter.py` produces a single narrative string and a rough keyword list. 
-Career inference is extremely brittle (`"mec" in name_lower` → mechanical) and not aligned to Romanian program naming patterns. 
-
-### Why it limits embeddings
-
-Students ask:
-
-* “Ce joburi pot avea după X?”
-* “Ce învăț concret?”
-* “Ce diferență e între X și Y?”
-* “Unde pot lucra în Craiova/București/remote?”
-* “E bun pentru data science / cybersecurity / cadastru?”
-
-Your current pitch doesn’t contain:
-
-* skills / tools / domains
-* “fit” signals (“dacă îți place…”, “dacă vrei…”, “profil”)
-* disambiguation against similar programs
-* controlled synonyms (Romanian + English) beyond a few additions
-
-### Phase‑8 upgrade: split “facts” from “inference”, add structured semantic anchors
-
-Add these fields (even if some are heuristic):
-
-* `facts`: strictly sourced from HTML/PDF (no guess)
-
-  * `degree_level`, `language`, `duration`, `spots_budget/tax`, `admission_year`
-* `inferred`: career/skills mapping with explicit confidence
-
-  * `career_paths`, `skills`, `industries`, `role_keywords`, `confidence`
-
-Then make your embedding text intentionally multi-intent:
-
-**Better embedding template (example)**
-
-* 1–2 sentence overview
-* “Ce înveți” bullet-like sentence
-* “Joburi” list
-* “Potrivit pentru” sentence
-* “Cuvinte cheie” synonym list
-* Provenance marker (year + PDF source)
-
-This makes retrieval far stronger than one flat sentence.
-
-Also: consider adding `faq_chunks` per program:
-
-* “Ce joburi?”
-* “Ce materii/skilluri?”
-* “Cum e admiterea?”
-  Each chunk becomes its own vector doc → massive gain in RAG precision.
-
----
-
-## 5) Zero Garbage: your Iron Dome still relies on whack‑a‑mole blacklists
-
-In `scraper.py`, the blacklist is huge and is executed inside a tight loop. 
-Also, you have **dead / duplicated logic**:
-
-* `PDF_ONLY_FACULTIES` is defined multiple times and there are `pass` blocks that do nothing (and are unreachable because you already `return` early for PDF-only). 
-
-### Phase‑8 Iron Dome 2.0: “Boilerplate fingerprinting” + positive validation
-
-You asked for smarter filtering without hard-coding new blacklists per faculty. The best approach here is **site-wide boilerplate detection**:
-
-#### A) Boilerplate fingerprinting (high precision, low maintenance)
-
-Across all pages you snapshot:
-
-* extract text blocks (e.g., `li`, `a`, `nav`, `footer`, repeated divs)
-* normalize them
-* compute frequency across pages
-
-If a block appears on **>X% of pages**, it’s navigation/boilerplate → exclude globally.
-
-This kills:
-
-* menu items
-* footer contact blocks
-* “Admitere Licență / Master” nav links
-  without enumerating strings.
-
-#### B) Positive structural validation
-
-Instead of “reject everything that looks like noise”, require *positive evidence* that a node is a program:
-
-* Must be inside a section whose heading matches: “Programe de studii”, “Specializări”, “Domenii”, etc.
-* Or must contain a spots pattern (`\d+ locuri`) **and** a program-like noun phrase
-* Or must link to an official program page (not general info)
-
-For hostile faculties, your early-exit PDF-only mode is correct (keep it). 
-
-#### C) Optional ML without sacrificing hygiene
-
-If you want ML:
-
-* train a simple classifier (logreg / small tree) on node features:
-
-  * length, digit ratio, link density, DOM depth, presence of diacritics, keyword hits
-* run it only as a **“high precision allowlist”**:
-
-  * accept only if `p(program) > 0.995`
-  * otherwise drop / fallback to PDF
-
-That keeps the “Zero Garbage” posture.
-
----
-
-## 6) Automating “Last Admission Grade” extraction (and doing it safely)
-
-You already have a schema slot: `last_admission_grade: Optional[float]`. 
-But your PDF selector currently **disqualifies** “rezultate”, which is exactly where last grade usually lives. 
-
-### The main trap: GDPR / personal data
-
-Result PDFs often contain candidate names/CNPs. Your system must:
-
-* **never store candidate identifiers**
-* only store aggregated values like “ultima medie” / “ultima notă”
-
-### Phase‑8 design: a separate Grades pipeline
-
-Treat grades as a different document class.
-
-#### Step 1: Discover grade PDFs
-
-New keyword group:
-
-* POSITIVE: `["rezultate finale", "lista finala", "admis", "respins", "ultima medie", "ultimul admis", "medie ultimului"]`
-* NEGATIVE (for grades pipeline): you might still exclude “cazare”, etc.
-* Prefer previous year (e.g., 2025 if you’re building 2026 intake guidance)
-
-#### Step 2: Detect if PDF contains personal data
-
-Scan extracted text for high-risk markers:
-
-* `CNP`, `Nume`, `Prenume`, `Data nașterii`, long digit runs (13 digits)
-  If detected:
-* Only compute aggregates in-memory
-* Do **not** persist raw rows/snippets
-* Save only `program_name -> min_grade` (or explicit “ultima medie” entries)
-
-#### Step 3: Extract the grade
-
-Common patterns:
-
-* “Ultima medie” / “Ultimul admis” followed by a number
-* Tables with columns like `Specializarea | Ultima medie buget | Ultima medie taxă`
-
-Handle Romanian decimal comma:
-
-* `9,42` → `9.42`
-
-#### Step 4: Fuse into Program entities
-
-Use the same fuzzy matcher approach:
-
-* match by program name
-* store:
-
-  * `last_admission_grade`
-  * `metadata.last_admission_grade_source`
-  * `metadata.last_admission_grade_year`
-  * (optional) separate budget vs tax grades
-
-Then in RAG:
-
-* add a sentence like: “În 2025, ultima medie la buget a fost ~X (sursă: rezultate finale).”
-
----
-
-## 7) Phase 8 roadmap (concrete, high-leverage)
-
-### Phase 8.0 — Correctness & test harness (must-do first)
-
-* Fix `_fuse_data()` bug (described above). 
-* Add a unit test that asserts: if PDF has spots for a known program, output JSON has non-null spots.
-
-### Phase 8.1 — PDF Truth Ranker + caching
-
-* Implement `PDFTruthRanker` with extraction preview + coverage scoring.
-* Cache `pdf_hash -> extracted_rows + features`.
-
-### Phase 8.2 — PDF parser hardening
-
-* Page-by-page parsing, better normalization, broader Romanian phrasing support. 
-* Store provenance: page index + snippet for each extracted row (for debug, not for embedding).
-
-### Phase 8.3 — Iron Dome 2.0
-
-* Boilerplate fingerprinting across snapshots.
-* Positive validation rules; optional high-precision classifier. 
-
-### Phase 8.4 — RAG schema enrichment for career queries
-
-* Separate `facts` vs `inferred`.
-* Add multi-intent embedding text and optional FAQ chunks. 
-
-### Phase 8.5 — Last admission grade extractor (privacy-safe)
-
-* Separate discovery + parsing + fusion pipeline.
-* Explicit PII detection and “aggregate-only” persistence. 
-
----
-
-## Final blunt summary
-
-* Your **architecture direction is correct** (PDF-only for hostile faculties, hybrid parsing, hygiene-first). 
-* But the current implementation has a **severe fusion bug** that prevents enrichment in the normal path. Fix that first. 
-* After that, the biggest ROI is a **Truth PDF Ranker** driven by extraction-quality + coverage, not keyword guessing.
-* The “Iron Dome” needs to evolve from blacklist maintenance into **structural + frequency-based boilerplate removal**.
-* Last admission grade extraction is doable, but must be engineered as a **privacy-safe aggregate extraction** pipeline.
-
-If you want, I can also propose a “data quality report” JSON you generate per run (coverage %, noise flags, per-faculty confidence) so you can gate production runs automatically—same “Iron Dome” philosophy, but applied to the pipeline outputs instead of just HTML nodes.
-
-
-## Critical findings (fix these before you add more “Phase 8” complexity)
-
-### 1) **Matcher is currently not fusing anything in HTML-first mode (major functional bug)**
-
-In `DataFusionEngine._fuse_data()`, you compute `results = matcher.match_all()` and then… stop. The loop that updates programs with PDF matches is accidentally placed **after a `return` inside `_infer_career_paths()`**, making it unreachable. Net effect: **ACE will never get PDF-enriched spots/grades**, and you’ll think “PDF parsing is weak” when the fuse step is simply not running. 
-
-This is the single highest-severity “code smell” because it silently fails while looking “fine” in logs.
-
-**Phase 8 Action:** move the fusion loop back into `_fuse_data()` and add a unit test that asserts at least one `spots_budget` gets populated from PDF for a known fixture.
-
----
-
-### 2) Your “Truth PDF” selection is based mostly on *link text*, not *document evidence*
-
-`_identify_spots_pdf()` ranks candidates using keyword hits + hardcoded year strings in URL/text. This is brittle because:
-
-* link text is often empty/generic
-* “GRILE” / “pliant” / “ANC” are *not* “cifra de școlarizare” docs, yet can win the score
-* year is hardcoded as `"2026"` / `"2025"` and will rot immediately 
-
-You already saw this in the recovered Agronomie record: it came from a **GRILE** PDF (exam grid) and yields only a program name, not spots. That’s “coverage”, but it is **not a “spots truth” doc**.
-
----
-
-### 3) Schema consistency is drifting (dangerous for “Zero Garbage RAG”)
-
-A few examples visible in your dataset + code:
-
-* `faculty_uid` is documented as “UID of the parent faculty” but you store the **slug** (`"ace"`, `"agronomie"`) in multiple places.
-* `language` is sometimes `"Romanian"/"English"` (scraper) and sometimes `"ro"/"en"` (RAG converter), which is fine if intentional, but then it needs a single canonical field + a derived field.
-* PDF-only synthesized programs are missing fields like `content_hash`, `duration_years`, sometimes `accuracy_confidence`, etc.
-* Hard-coded admission year `2026` appears in multiple components.
-
-For “Zero Garbage”, schema drift is *garbage*, because it breaks deterministic retrieval filters and evaluation.
-
----
-
-### 4) Your HTML “Iron Dome” still lets contaminated program names through
-
-Example: the ACE English program name includes “2 locuri la buget…” inside the `name` field. That’s not noise like “Cazare”, but it **pollutes embeddings and matching** and creates keyword junk like `"(program"` in the dataset.
-
----
-
-## Architectural bottlenecks (what will hurt you at scale)
-
-### A) File-per-entity JSON storage will collapse at multi-university scale
-
-Right now you write each program into its own JSON file under `data/runs/<run_id>/raw/<faculty>/programs/*.json`.
-This is fine for dozens/hundreds of records. It becomes painful at tens/hundreds of thousands:
-
-* slow directory scans
-* poor atomicity for “update program with new fields”
-* hard to query/diff runs
-
-**Phase 8 scaling move:** store entities as **JSONL or Parquet** (or a tiny SQLite/DuckDB) per run, plus a separate “evidence” table.
-
----
-
-### B) You lack an explicit “Evidence Model”
-
-You’re doing multi-source extraction (HTML + many PDFs), but the architecture treats the result as “the record”, not “record + competing evidence”.
-
-That blocks proper “truth selection” and also blocks auditability (“why did we believe this PDF?”).
-
-**Phase 8 foundation:** create an `Evidence` object like:
-
-```python
-Evidence(
-  field="spots_budget",
-  value=12,
-  program_key="...normalized...",
-  source_type="pdf",
-  source_url="...",
-  source_doc_type="spots",
-  extractor="pdf_table_v2",
-  confidence=0.92,
-  page=2,
-  raw_snippet="...row text...",
-  run_id=...
-)
-```
-
-Then “Truth” becomes a deterministic reducer over evidence (highest confidence, newest year, best doc_type).
-
----
-
-## Phase 8 proposal (concrete optimizations)
-
-### Phase 8.1 — Document classification + evidence-driven “Truth PDF” ranking
-
-Replace `_identify_spots_pdf()` with a **2-stage ranker**:
-
-#### Stage 1: cheap scoring (link/URL/context)
-
-* year hint
-* anchor text keywords
-* surrounding heading text (grab parent `<h2>/<h3>` near the link in HTML)
-* file extension + size (once downloaded)
-
-#### Stage 2: evidence scoring (first-page scan)
-
-After download, do a **fast first-page text pass** (or first 2 pages):
-
-* `text_len` (detect scanned vs digital)
-* keyword density: `("buget", "tax", "locuri", "cifra", "capacitate")`
-* presence of **table-like structure**
-* presence of **faculty name** / university name
-* presence of “rezultate finale / lista admisi / ultima medie” (to classify as “grades/results” doc)
-
-Then assign:
-
-* `doc_type ∈ {spots, results, methodology, fees, schedule, exam, brochure, unknown}`
-* `quality_score` and `extractability_score`
-
-**Why this matters:** You stop comparing “cifra de școlarizare” against “grile” in the same bucket. Today you’re doing exactly that.
-
-#### Truth selection strategy (important)
-
-Stop choosing “one truth PDF”. Instead:
-
-* choose “truth” **per doc_type**
-* fuse per-field:
-
-  * spots fields come from doc_type=spots
-  * last grade fields come from doc_type=results
-* keep runners-up as metadata (for audits)
-
----
-
-### Phase 8.2 — Harden PDF parsing without regex fragility
-
-Your regex backtracking fix is good (bounded `[\s\S]{0,300}` etc), but Romanian PDFs will still break you on:
-
-1. **Legacy diacritics**: `ş/ţ` appear often; your char classes include `ș/ț` but not always `ş/ţ`. 
-2. **Program names with punctuation**: parentheses, commas, slash, “(IF)”, “în limba engleză”, etc.
-3. **Hyphenation / line breaks**: PDF text extraction inserts hard newlines and hyphens mid-word.
-
-**Phase 8 approach:** less “one giant regex”, more “line-level state machine”:
-
-* Normalize text:
-
-  * `unicodedata.normalize("NFKC", text)`
-  * map both `ș/ş → s`, `ț/ţ → t` for *matching only*
-  * de-hyphenate patterns like `re.sub(r'(\w)-\n(\w)', r'\1\2', text)`
-* Split into lines, then detect patterns per line:
-
-  * if line contains “buget” and “tax”, extract numbers from that line
-  * if line looks like a program name line (mostly letters, length bounds), set current “program_name”
-  * emit record when you’ve seen enough signals in a local window
-
-This is dramatically more robust than global regex over a whole PDF.
-
-Also: table extraction will remain flaky unless you use `pdfplumber` table settings and/or coordinate-based column inference (you already called this out as a future fix).
-
----
-
-### Phase 8.3 — Make the “Iron Dome” intelligent without whack‑a‑mole blacklists
-
-Your blacklist in the scraper is enormous and will never finish. 
-To keep “Zero Garbage” while scaling to new universities, shift from negative lists to **template/boilerplate suppression + positive validation**:
-
-#### (1) Boilerplate fingerprinting (high leverage, low ML)
-
-For each domain:
-
-* collect text shingles (e.g., 5-grams) across multiple pages
-* compute “repeated across ≥X% pages” = boilerplate
-* subtract boilerplate from candidate nodes
-
-This automatically kills nav/footer text without needing 200 regex patterns.
-
-#### (2) Link density + DOM role heuristics
-
-Reject nodes that:
-
-* have high `<a>` density
-* are inside `<nav>`, `<footer>`, “menu”, “sidebar”
-* have tiny text repeated across many pages
-
-#### (3) Positive structural validation for “program candidates”
-
-Only accept a program line if it passes a strict validator:
-
-* length bounds
-* must not contain URL/email
-* must not be all uppercase unless also matches “program markers”
-* must be near a heading like “Programe de studii / Specializări / Licență / Master”
-* optional: must be confirmed by at least one other source (PDF or second page)
-
-This keeps your “Zero Garbage” promise while making it portable to other universities.
-
-If you do want ML:
-
-* train a lightweight classifier (LogReg/XGBoost) on features: text length, digit ratio, link ratio, DOM depth/path, neighboring headings
-* generate labels via **weak supervision**:
-
-  * positives = items that match PDF program names
-  * negatives = items in nav/footer + your existing blacklist hits
-    This avoids manual labeling and adapts per domain.
-
----
-
-### Phase 8.4 — RAG enrichment: shift from “pitch text” to “student intent coverage”
-
-Your `text_for_embedding` is currently a short template, and career paths are crude keyword triggers.
-For career Q&A, embeddings get much better when the document explicitly contains:
-
-* skills students gain
-* industries
-* example job titles in Romanian + English
-* “what you’ll study” topics
-
-**But** you must avoid hallucinating UCV-specific facts. The safe way:
-
-#### Add a structured “Career Ontology” layer (curated + deterministic)
-
-Create a mapping file (YAML/JSON) per country or per language:
-
-```yaml
-program_clusters:
-  "inginerie software":
-    skills: ["programare", "algoritmi", "cloud", "testare", "arhitectură software"]
-    jobs_ro: ["Programator", "Inginer software", "QA Engineer", "DevOps"]
-    jobs_en: ["Software Engineer", "SRE", "Backend Developer"]
-    industries: ["IT", "SaaS", "automotive", "finance"]
-```
-
-Then your narrative becomes **semantically rich** without claiming curriculum specifics.
-
-#### Upgrade `RAGSchemaConverter` output
-
-Add fields:
-
-* `skills`, `industries`, `job_titles_ro`, `job_titles_en`
-* `questions_this_answers` (list of student intents)
-* `admission` object with provenance
-
-And expand the embedding text into an “intent-complete card”:
-
-* What it is (program + level + faculty + city)
-* What you learn (skills/topics)
-* Who it fits (student profile)
-* Careers (jobs + industries)
-* Admission signals (spots + last grade if available) + sources
-
-Also: make keywords deterministic (sort them) instead of `list(set(...))` which changes order across runs. 
-
----
-
-## Code smells & refactors by component
-
-### `matcher.py`
-
-* **Fatal:** HTML+PDF fusion loop is unreachable (explained above). 
-* Hard-coded years `"2026"/"2025"` should come from:
-
-  * run context (`run_id` timestamp) or config
-  * or “max year found in doc text”
-* `_identify_spots_pdf()` mixes doc intents (spots vs exam grids vs brochures). Introduce doc classification.
-* PDF-only synthesis hardcodes `"level": "Master"` and placeholder `scraped_at`. That will poison downstream logic. 
-
-  * At minimum, infer level from source URL, surrounding page URL, or PDF header text.
-* Imported modules unused (`process`, `fuzz_utils`, `unicodedata` appear unused). 
-
-### `pdf_parser.py`
-
-* Regex char classes don’t fully cover Romanian legacy diacritics (`ş/ţ`). 
-* Program name capture is too restrictive (letters/spaces/hyphen only). Expect parentheses, commas, “/”, etc.
-* Returned rows do not include `level/domain` although matcher scoring expects them (even if optional).
-* Table extraction fallback to `row[2]` and `row[5]` is brittle. Better to:
-
-  * require header-derived columns OR
-  * compute numeric columns by density/position
-
-### `scraper.py`
-
-* Dead code / duplicated constants: `PDF_ONLY_FACULTIES` appears multiple times and there are `pass` blocks that can never execute because you return earlier for PDF-only faculties. 
-* Program name hygiene bug: if a list item includes “locuri buget / taxă”, you parse the numbers but don’t strip them from the name → contaminates name + embeddings.
-* `level = "Licenta" if "licenta" in url else "Master"` is fragile and will not scale to other universities. 
-* Huge blacklist is not scalable (see Phase 8.3).
-
-### `rag_converter.py`
-
-* Hard-coded `rag_id = f"ucv_..."` blocks multi-university expansion; make it `{university_code}_{faculty}_{uid8}`. 
-* Hard-coded admission year `2026` should come from run context/config. 
-* Keywords contain junk tokens (“(program”). Add a keyword sanitizer:
-
-  * strip punctuation
-  * remove stopwords
-  * keep multiword phrases (“inginerie software”) as phrase keywords
-
----
-
-## Automating “Last Admission Grade” extraction (your missing field)
-
-You already have `last_admission_grade` and `raw_admission_text` in the schema. 
-What’s missing is a **doc discovery + parser + matcher** for results/grades.
-
-### Step 1: Discover likely “results/grades” PDFs (reuse pdf_queue)
-
-You already collect *all* PDFs into `pdf_queue.json`.
-Extend classification keywords:
-
-* positive: `rezultate`, `liste finale`, `admiși`, `repartizare`, `ultima medie`, `medie ultimul admis`, `clasament`
-* negative: `metodologie`, `taxe`, `calendar`, `grile` (these are not last-grade docs)
-
-### Step 2: Implement a `LastAdmissionGradeParser`
-
-Two strategies (same pattern as Hybrid PDF parser):
-
-1. **Table strategy:** detect headers like `specializare / program`, `ultima medie`, `medie`, `punctaj`
-2. **Text strategy:** scan for patterns like:
-
-   * `PROGRAM ... ultima medie: 8,73`
-   * or lines where a grade (float 1–10) appears near “ultima medie / ultimul admis”
-
-**Quality gate (Zero Garbage):**
-
-* grade must parse to float
-* must be within [1.00, 10.00] (or [0, 10] depending on doc)
-* must be attached to a plausible program name (length + letter ratio)
-
-### Step 3: Match grade rows to programs
-
-Use the same `RomanianProgramMatcher` (after you fix it) or a specialized matcher that prioritizes **exact normalized name** match first.
-
-### Step 4: Store provenance
-
-Write:
-
-* `last_admission_grade`
-* `raw_admission_text`
-* `metadata.last_grade_pdf_url`
-* `metadata.last_grade_year`
-
-This keeps “truth” explainable.
-
----
-
-## Scaling beyond UCV (multi-university architecture upgrade)
-
-Right now, UCV specifics leak everywhere (hardcoded prefixes, container IDs, Romanian-only assumptions).
-To scale cleanly:
-
-### 1) Introduce a University Adapter interface
-
-A new university should only provide:
-
-* faculty list (URLs)
-* extraction strategy per faculty (HTML vs PDF-first)
-* optional DOM selectors / site rules
-* optional language/normalization rules
-
-Everything else should be shared core.
-
-### 2) Build a shared “Document Pipeline Core”
-
-Core modules:
-
-* `fetcher` (polite HTTP + caching)
-* `snapshot_store`
-* `pdf_discovery`
-* `pdf_downloader`
-* `doc_classifier`
-* `parser_registry` (spots parser, grade parser, etc.)
-* `evidence_store`
-* `truth_reducer`
-* `rag_exporter`
-
-### 3) Standardize IDs & provenance for cross-university dedupe
-
-Use a canonical `program_key`:
-
-* `university_code + faculty_code + normalized_program_name + level`
-  This avoids collisions and makes diffs across years trivial.
-
-### 4) Add regression fixtures
-
-For each university:
-
-* 2–3 HTML snapshots
-* 2–3 PDFs per doc type
-  Then run deterministic tests:
-* “no garbage tokens”
-* “no nav contamination”
-* “row count within expected bounds”
-* “truth reducer stable”
-
-This is how you prevent the Iron Dome from slowly degrading.
-
----
-
-## If you do only 3 things in Phase 8
-
-1. **Fix matcher fusion bug** (you’re flying half-blind until this is corrected). 
-2. **Add document classification + evidence model** so “Truth PDF” is based on PDF content, not link text.
-3. **Replace blacklist growth with boilerplate fingerprinting + positive validation** (portable across universities).
-
-If you want, I can sketch a concrete `Evidence + TruthReducer` data model and the exact scoring function (weights + quality gates) that will keep “Zero Garbage” while improving recall—without turning the system into a regex graveyard.
-
-2nd prompt:
-also think about scaling in mind the future i want to extend to more universities not just ucv
-thinking:
-Pro thinking
-Considering improvements for data pipeline
-
-I need to think about optimizing the current setup as a senior data engineer and RAG architect. There are several files to review, like scraper.py, pdf_parser.py, etc. I'll focus on Phase 8, looking for ways to improve PDF selection, enhance regex, enrich schemas, and scale processes to more universities. I’ll also need to cite these files properly, ensuring I follow new guidelines.
-Focusing on code review and analysis
-
-We don't need to use web browsing tools for this task since it's about reviewing architecture and scaling, not gathering up-to-date data. I already have the key files, but I'll inspect the full content directly from the file paths to make sure there are no errors or issues. I'll use Python to analyze the code carefully.
-Evaluating code structure and scaling optimizations
-
-Always show details
-import pathlib, json, re, textwrap, os, sys, pandas as pd
-
-Evaluating code optimization, scalability, and file inspections
-
-Always show details
-from pathlib import Path, PurePosixPath
-files = ["scraper.py","pdf_parser.py","matcher.py","rag_converter.py","scraper_base.py","program.py","rag_dataset.json","walkthrough_v7.md","architecture_v6_system_overview.md","task.md"]
-for f in files:
-    p=Path("/mnt/data")/f
-    print(f, p.exists(), p.stat().st_size if p.exists() else None)
-
-Analyzed
-Inspecting matcher.py for issues
-
-It looks like the snippet in file_search is incomplete and contains a bug—there's a return statement in _infer_career_paths, but the following code seems unreachable. I’ll need to open the full matcher.py file to check the indentation and ensure everything is correctly structured for proper functionality.
-Inspecting full matcher.py file content
-
-Always show details
-import inspect, ast, pprint, math
-matcher_text = Path("/mnt/data/matcher.py").read_text(encoding="utf-8")
-print(matcher_text[:2000])
-
-Analyzed
-Checking context around bug
-
-I want to take a look at the rest of the code surrounding the suspicious part to get better context. This will help me understand the structure and catch any possible issues that might be affecting the program, especially around the problematic section I noticed.
-Displaying suspicious part of the text
-
-Always show details
-print(matcher_text[2000:5000])
-
-Analyzed
-Displaying surrounding text of suspicious section
-
-Always show details
-print(matcher_text[5000:9000])
-
-Analyzed
-Extracting text from matcher output
-
-Always show details
-print(matcher_text[9000:13000])
-
-Analyzed
-Displaying text from matcher output
-
-Always show details
-print(matcher_text[13000:18000])
-
-Analyzed
-Identifying critical bugs and issues
-
-There's a critical bug in _infer_career_paths: after the return statement, additional code is misindented, making it unreachable. This means the HTML-to-PDF matching isn't applied, and matching results aren't used or saved for faculties with programs and pdf_rows. There's also an indentation issue in the prog dictionary, misaligning the "entity_type" and "source_type" keys.
-Addressing indentation in the dictionary
-
-In the prog dictionary, the "entity_type" and "source_type" keys are misindented with extra spaces before them. However, Python doesn't require indentation inside braces. Even though ignoring indentation is okay in a dictionary, the spaces before these keys could cause a syntax issue if they’re mistakenly treated as separate statements. I'll check the formatting more closely to ensure it's correctly written.
-Identifying indentation and unreachable code issues
-
-Always show details
-lines = matcher_text.splitlines()
-for i in range(120, 170):
-    print(f"{i+1:03d}: {lines[i]}")
-
-Analyzed
-Checking dictionary indentation lines
-
-I’ll focus on inspecting the indentation around the dictionary lines for "entity_type" and "source_type". It's important to ensure that the extra spaces aren’t causing any issues. I'll carefully check their formatting in the dictionary and make sure everything is aligned correctly to avoid any potential errors.
-Inspecting specific dictionary indent lines
-
-Always show details
-for i in range(250, 330):
-    print(f"{i+1:03d}: {lines[i]}")
-
-Analyzed
-Inspecting PDF-Only Mode indentation
-
-I should focus on inspecting the dictionary lines in the context of PDF-Only Mode. It’s crucial to ensure there aren’t any alignment issues or hidden bugs in the dictionary entries related to this mode. I’ll look closely at these to make sure everything inside the dictionary is formatted correctly.
-Inspecting specific PDF dictionary lines
-
-Always show details
-for i in range(350, 430):
-    print(f"{i+1:03d}: {lines[i]}")
-
-Analyzed
-Examining bug in enrichment mode
-
-There seems to be a significant bug where lines 392-418 should be in _fuse_data but ended up within _infer_career_paths after a return statement. This causes enrichment to be non-functional. The data in rag_dataset, like program details with spots_budget, are likely from HTML parsing, not PDF extraction. I’ll also need to check scraper.py for any issues related to blacklists.
-Evaluating PDF parser and scraper logic
-
-Always show details
-pdf_parser_text = Path("/mnt/data/pdf_parser.py").read_text(encoding="utf-8")
-print(pdf_parser_text[:2500])
-
-Analyzed
-Extracting text from PDF document
-
-Always show details
-print(pdf_parser_text[2500:6000])
-
-Analyzed
-Extracting text from PDF document
-
-Always show details
-print(pdf_parser_text[6000:9500])
-
-Analyzed
-Displaying extracted PDF text
-
-Always show details
-print(pdf_parser_text[9500:13000])
-
-Analyzed
-Evaluating PDF parser robustness
-
-The PDF parser isn't too complex: pattern-based to avoid backtracking. However, I need to check its robustness with elements like diacritics (e.g., variations of "locuri bugetate") and some table extraction issues, such as misaligned columns. I’m thinking of proposing an improved extraction method using bounding boxes or libraries like Camelot. Also, scraper.py is vast, so it's time to dive in there.
-Examining code consistency with faculty_uid and slug
-
-It looks like there’s a potential consistency issue where faculty_uid is being set to slug in the Program model, even though faculty_uid should be the hashed UID of the parent faculty. This might cause problems in cross-referencing since it’s not consistent. Also, blacklists could benefit from pre-compiling regex patterns to optimize pattern matching.
-Identifying mismatches in data handling and heuristics
-
-There's a mismatch with how faculty_uid is stored as "ace" (a slug), which could cause confusion. Also, Program UID generation uses a combination of URL and program name hashing, but this may cause issues with multiple pages for the same faculty. The heuristics in HTML extraction could misclassify the "level" based on the URL, and the parsing approach seems simplistic for "calc". A more adaptive config could help.
-Reviewing program data processing and improvements
-
-The process handles program names and faculty_uids with expansions, de-duplicates, and narratives. But for spots_tax, using None could be ambiguous. It should remain as "unknown". The rag_id generation is hard-coded to "ucv", which should incorporate university-specific codes for scalability. Additionally, smarter blacklist handling could involve structural validation or ML classification.
-Evaluating robust parsing strategies and future roadmap
-
-Instead of using blacklists, we could adopt a positive extraction approach based on DOM patterns from program lists, leveraging markers like "Master" or "Licenta". For scalability, implementing a plugin system with YAML-driven extraction rules per university seems advantageous. We also need better local path management in pdf_queue entries to ensure smoother processing. The proposed phase 8 plan covers data recovery through multi-PDF retries, scoring, and a model to assess PDF quality using various features like year, text, and row quality.
-Improving PDF candidate evaluation and conflict resolution
-
-Instead of treating scanned PDFs as high priority, we'll consider them low priority for extraction. We can compute quality metrics like row count, percentage of spots with numbers, duplicates, and row quality. For matching rows across PDFs, let's prioritize match coverage, prefer documents with more rows, and resolve conflicts based on file metadata or matching scores. Proposed improvements also include handling diacritics in regex and expanding patterns for better matching with Romanian terms.
-Refining text extraction and schema enrichment
-
-For better text extraction from documents, it’s smarter to process line-by-line instead of relying on complex regex. I’ll use a state machine or tokenization approach to simplify parsing. For scanned PDFs, I may add optional OCR functionality, but only if needed for scanned documents. Additionally, I'd improve schema enrichment with structured fields for official details (program name, faculty, skills, etc.) using templates rather than one paragraph—this could help with quicker extraction and better embeddings.
-Improving accuracy and validation strategies
-
-To avoid errors, I’ll focus on only including known data and flagging unknowns. Instead of relying on negative blacklists, I’ll use positive validation, ensuring essential markers are present before accepting a program. I’ll also consider using machine learning for rejecting noisy nodes, and using semantic validation for text matching. Additionally, I’ll introduce controlled vocabularies and new fields like "skills" and "industries." Finally, creating a "ProgramOntology" could help scale across universities and fields.
-Addressing bugs and inefficiencies
-
-I’m thinking about optimizing the process by using a program token dictionary from official lists and creating config-driven strategies per university. Also, there are a few issues I need to resolve, like unreachable code, hard-coded years, and duplicated constants. I’ll improve efficiency by precompiling patterns and using deterministic program IDs. Additionally, I'll clean up unused imports and improve logging for better context. Issues like misidentified keywords and inefficiencies in matching will also be addressed.
-Improving PDF parsing and automating grade extraction
-
-I need to refine the PDF parser by better detecting headers. I'll require more than one keyword for robustness. For grade extraction, I can automate the process by detecting terms like "ultima medie" and scraping relevant PDFs or tables. I'll also build more flexible extraction methods to scale across universities.
-Proposing system architecture improvements and scaling
-
-We’re organizing the pipeline into discovery, canonicalization, extraction, validation, enrichment, and export stages. To enhance performance, we suggest a "University Adapter" for each institution, document registry for PDFs, and concurrency for downloads and parsing. We also propose caching, OCR for scanned PDFs, and improving scalability through various architectural enhancements and metric extraction. Finally, we’ll suggest pseudocode for a document scoring function.
-Evaluating PDF parser robustness and scraper optimizations
-
-Always show details
-scraper_text = Path("/mnt/data/scraper.py").read_text(encoding="utf-8")
-print(scraper_text[:2000])
-
-Analyzed
-Extracting portion around key terms in text
-
-Always show details
-# show portion around pdf sweep and blacklist
-start = scraper_text.lower().find("global pdf sweep".lower())
-print(start)
-print(scraper_text[start:start+2500])
-
-Analyzed
-Inspecting blacklist patterns in scraper text
-
-Always show details
-start = scraper_text.lower().find("blacklist_patterns".lower())
-print(scraper_text[start-500:start+1200])
-
-Analyzed
-Cleaning up extraneous code and improving scalability
-
-I noticed that in scraper.py, there’s unused code for PDF checks that can be removed since a global PDF sweep was already done. Also, the "Faculty Cross-Contamination Firewall" needs to be more scalable. Using structural features for detecting faculty-related content or known slugs might be a better solution.
-Fixing issues with program model schema and domain handling
-
-In UCVScraper._extract_from_snapshot, the level parsing based on URL is a bit off, as it defaults to "Master" without properly checking for other levels like "doctorat." Also, the Program model doesn't set the domain field, which creates some mismatches, as matcher expects it to be present.
-Addressing inconsistencies and incorrect assumptions in Program model and scraping
-
-The Program model has inconsistencies with language handling, setting "Romanian" instead of an ISO code. Also, the duration is defaulted to "4 years," but it can vary depending on the program. The scraped budget/tax data has low confidence and should be treated more carefully, perhaps with stricter validation.
-Handling agronomie career_paths and mapping issues
-
-The agronomie program shows empty career paths because the converter doesn't handle it, while the synthesis already sets career paths. The keyword "mediu" maps successfully but wasn't handled for the program name with diacritics. Correcting it involves ensuring that career paths for "ECOLOGIA" are mapped correctly.
-Fixing career_paths and consistency in scraping
-
-It looks like the reason "career_paths" is empty for agronomie is because the rag_converter overwrote it with an empty list. Rag_converter should only compute career_paths if they aren't already set. There are also issues with hardcoding fields like admission_year, which should be dynamic. The program_id could be more stable across runs by using a canonical name and faculty.
-Considering stable ID and regex adjustments
-
-It seems like UCVScraper's hard-coded settings may break if the site reorganizes, so stable IDs across years are a good idea. To scale, the plan is to use university_code and config, which already works in BaseScraper. The regex pattern needs adjustments for program names with special characters, punctuation, or digits to prevent errors with certain diacritics and symbols.
-Handling diacritic variations and pattern limitations
-
-The regex pattern works for uppercase diacritics, but might miss cedilla versions like 'Ş' and 'Ţ', especially in old PDFs. A broader pattern could include both forms. Also, the pattern expects program names in Title Case; hence, it doesn’t handle acronyms, uppercase names, or digits well, though it still captures some data. Adjusting the filtering rules could help avoid removing relevant terms unintentionally, like "Master" in program names.
-Improving PDF extraction and classification
-
-The current regex could potentially cause catastrophic backtracking; it might be better to simplify the parse. There are diacritics to consider, and normalization isn’t thorough throughout. Scanning can fail, triggering fallback; adding a detection step based on text length could help. Also, using a dynamic approach for the year rather than hardcoded values would streamline updates. Better keyword targeting for different document types would improve accuracy, such as focusing on numbers in the "spots doc" category.
-Improving document extraction process
-
-They should account for potential cross-faculty PDFs, though some are only captured from one page. For the Iron Dome process, instead of using blacklists, I’m thinking of generating “text fingerprints” to identify recurring elements across pages. Using hashing would help remove repeats, like headers/footers but avoid removing common program names like "Management." I also want to consider adapting extraction for different CMS, ensuring minimal false positives and high precision. The Phase 8 plan includes enhancing content extraction, document registration, and improving table extraction in PDFs.
-Optimizing RAG Schema 2.0 and PDF Parsing
-
-For the RAG Schema 2.0, I want to include key topics like study areas, career paths, and admissions details from safe sources, integrating a taxonomic approach like ESCO. I’ll focus on avoiding noise through curated data. I also want to improve grade extraction with validation, and structure the system for scalability to more universities. The hybrid PDF parser could unify parsing strategies, and adding tests will help ensure accuracy and detect noise.
-Planning response for scaling and Phase 8 improvements
-
-For scaling to more universities, I want to focus on creating a scalable structure, including an adapter interface and modular components. I'll also simplify the matcher and parser to improve efficiency. I need to suggest practical fixes to bottlenecks, incorporate citation for files, and explore data quality gating and caching as potential optimizations. Lastly, I might integrate a table summarizing issues in the code — though it's not mandatory.
-Evaluating code architecture and scaling for extension
-
-Always show details
-rag_converter_text = Path("/mnt/data/rag_converter.py").read_text(encoding="utf-8")
-print(rag_converter_text[:2000])
-
-Analyzed
-Displaying selected text range from document
-
-Always show details
-print(rag_converter_text[2000:5000])
-
-Analyzed
-Inspecting program code
-
-Always show details
-program_text = Path("/mnt/data/program.py").read_text(encoding="utf-8")
-print(program_text)
-
-Analyzed
-Highlighting schema and field inconsistencies in the program model
-
-It seems the schema is inconsistent, especially regarding the career_paths field. The Program model doesn't include it, but rag_converter expects it. The root of the problem might be in how data is saved using model_dump_json, which drops extra fields unless the model explicitly includes them.
-Addressing code smells and user requests
-
-There's a potential issue in BaseScraper with file path conflicts when using a timestamp to save snapshots, but it seems the UID prefix handles this. Also, the timestamp in quarantine_error lacks timezone support, though it might not be crucial. Regarding the user's questions, I'll propose improvements for scoring conflicting PDFs, handle diacritic edge cases in Romanian parsing, enhance narrative pitches for career info, and explore smarter ways to improve Iron Dome intelligence without static blacklists. I'll also suggest automating the extraction of last admission grades.
-Analyzing schema inconsistencies and proposing improvements
-
-Always show details
-import ast, traceback
-for f in ["matcher.py","scraper.py","pdf_parser.py","rag_converter.py"]:
-    try:
-        ast.parse(Path("/mnt/data")/f.read_text if False else "pass")
-    except Exception as e:
-        pass
-
-Parsing Python files with AST for syntax errors
-
-Always show details
-for f in ["matcher.py","scraper.py","pdf_parser.py","rag_converter.py","scraper_base.py","program.py"]:
-    p=Path("/mnt/data")/f
-    try:
-        ast.parse(p.read_text(encoding="utf-8"))
-        print(f, "OK")
-    except SyntaxError as e:
-        print(f, "SyntaxError", e)
-
-Analyzed
-Understanding pipeline context
-
-The syntax seems to be fine. Now, I need to dive deeper into the current pipeline—there’s something about run_pipeline, but it hasn’t been uploaded yet. I can still reason through it, and I could also check walkthrough_v7.md and architecture_v6_system_overview.md for additional context. I’ll read them briefly to gather more details.
-Reading pipeline documentation for context
-
-Always show details
-walkthrough = Path("/mnt/data/walkthrough_v7.md").read_text(encoding="utf-8")
-arch = Path("/mnt/data/architecture_v6_system_overview.md").read_text(encoding="utf-8")
-print(walkthrough[:800])
-print("\n---\n")
-print(arch[:800])
-
-Analyzed
-Preparing answer and DataFrame summary
-
-Okay, now I need to craft a detailed response for the user from the perspective of a senior architect. I’ll provide both improvements and critiques, and I'll make sure to focus on scalability. I’ll also go ahead and create a DataFrame summary to neatly present everything. Let's organize it clearly!
-Evaluating software issues and proposed improvements
-
-Always show details
-issues = [
-    {"Component":"matcher.py","Severity":"P0 (broken)","Issue":"Unreachable enrichment logic: after `results = matcher.match_all()` nothing saves; loop accidentally indented under `_infer_career_paths` after a return.","Impact":"PDF enrichment never applied for faculties with HTML programs; silently loses spots/grades; false confidence.","Fix":"Move the `for res in results:` block back into `_fuse_data` and remove dead code. Add unit test that asserts spots updated when PDF rows exist."},
-    {"Component":"matcher.py","Severity":"P1","Issue":"Hard-coded years (`current_year='2026'`, `fallback_year='2025'`, `admission_year=2026`, placeholder `scraped_at`).","Impact":"Pipeline breaks next year; wrong metadata; wrong PDF selection.","Fix":"Derive year from run config or `datetime.now().year`. Persist `run_context.json` with `admission_year` once."},
-    {"Component":"scraper.py","Severity":"P1","Issue":"Huge negative blacklist patterns inside hot loop + manual other-faculties firewall.","Impact":"Non-scalable to new faculties/universities; brittle; performance O(n*m) regex searches.","Fix":"Switch to positive validation + structural filters; precompile patterns; build reusable BoilerplateRejector."},
-    {"Component":"scraper.py","Severity":"P1","Issue":"PDF queue dedupe uses `any(...)` linear scan per link.","Impact":"O(n^2) when many PDFs; slows scaling.","Fix":"Maintain a `set` of seen pdf_urls."},
-    {"Component":"scraper.py","Severity":"P1","Issue":"Infers level from URL (`'licenta' in url else 'Master'`).","Impact":"Mislabels PhD/other pages; wrong embeddings & matching.","Fix":"Infer from page headings or config; store `cycle` explicitly in faculty config."},
-    {"Component":"pdf_parser.py","Severity":"P1","Issue":"Regex char classes miss cedilla diacritics (`ŞŢşţ`) and punctuation in program names (/,(),.,&).","Impact":"Parser fails on common Romanian PDF encodings/layouts; recall loss.","Fix":"Unicode normalize (NFKC) and broaden name tokenization; move to line/state-machine parsing, keep bounded regex."},
-    {"Component":"pdf_parser.py","Severity":"P2","Issue":"Table column mapping is heuristic and may pick wrong numeric columns in wider tables.","Impact":"Wrong spots; garbage acceptance risk.","Fix":"Detect numeric columns by digit density; require both buget+tax headers; use bbox-based column segmentation."},
-    {"Component":"rag_converter.py","Severity":"P1","Issue":"Overwrites existing `career_paths` with empty list; hard-codes `ucv_` program_id; hard-codes admission_year=2026; prints 0 for unknown `spots_tax`.","Impact":"Loses enrichment from matcher; not reusable for other universities; introduces misleading values.","Fix":"Respect existing fields, use `university_code` in IDs, use run context year, represent unknown as `None`/`necunoscut`."},
-    {"Component":"schema","Severity":"P2","Issue":"Program model lacks fields that downstream uses (`career_paths`, `domain`, etc.), so typed pipeline not enforced.","Impact":"Silent schema drift; surprises in RAG dataset.","Fix":"Promote to versioned schema (Pydantic) with `extra='forbid'` at boundaries + explicit `metadata` bag for optional fields."},
-]
-import pandas as pd
-df = pd.DataFrame(issues)
-df
-
-Analyzed
-Preparing table display for user
-
-I'll use a Python table to clearly display the information for the user. I’ll present it
-Crafting narrative with citations and proposing improvements
-
-Alright, let’s start by forming the narrative response. We’ll address each issue and ensure citations are included in every relevant paragraph. We'll mention when career_paths is overwritten in rag_converter and dataset, referencing the proper files. Additionally, we’ll note hardcoded years and keywords in multi-pdf scoring using matcher, and regex issues using pdf_parser. Then, I'll propose potential improvements based on those issues. Time to get it all organized and referenced clearly.
-Proposing improvements for truth PDF selection
-
-Here’s how we can improve the current PDF selection logic: Right now, the _identify_spots_pdf function depends on link text and year keywords, with some basic validation during candidate selection. But it's not robust with conflicting sources, and hardcoded years aren’t efficient. We propose a two-stage approach:
-
-    Stage A: Preflight scoring using simple signals like URL text, page count, etc., to rank PDFs.
-
-    Stage B: Extract scoring after parsing rows: assess quality and use that to select truth.
-
-Also, scoring formula could be: truth_score = 10*year + 6*doc_type + 8*parse_quality + 5*match_coverage - 10*noise.
-Clarifying definitions for scoring criteria
-
-Here are the definitions I’m using for scoring:
-
-    Year: This is extracted from the URL path or PDF text, and it’s weighted by how close it is to the current admission year.
-
-    Doc_type: This is a classification system, where it can be categorized into one of four types: SPOTS, FEES, RESULTS, or GRILE.
-
-Proposing improvements for selection logic
-
-For better processing of Spots documents:
-
-    Parse quality: This includes factors like the number of rows with spot numbers, unique program names, blacklisted rows, and presence of header rows.
-
-    Match coverage: For faculties with HTML programs, it evaluates how many HTML programs match (score > 0.65) and their average match score.
-
-For conflicts:
-
-Instead of just picking the first valid PDF, I’ll calculate the best "truth score" across all files and choose the highest. Additionally, I’ll keep the next best file as a backup and create a "selection report" to track the process.
-
-Regarding field-level fusion:
-
-If one PDF has good rows but misses some programs, I’ll combine information from different PDFs based on the canonical program name while prioritizing confidence in the values. I’ll use a union approach instead of intersection, but only add programs that either match a known list or pass strong validation to avoid errors.
-
-For scanned PDFs:
-
-I’ll integrate OCR as a fallback option, but it’s not essential. Finally, I’ll treat the PDF queue as part of the "documents" pipeline for further processing.
-Improving regex robustness and handling diacritics
-
-To improve regex matching, we can normalize text by replacing characters like 'ş' and 'ș' with the same base form. Instead of relying on default Unicode character classes, I'll propose using pre-normalized ASCII patterns for matching. This helps avoid issues with diacritics, but we must extract names from the original text to preserve those details, using fuzzy matching if necessary. Lastly, edge cases like "taxă" vs "taxa" can be dealt with through normalization and matching adjustments.
-Multi-line handling and schema enrichment
-
-For multi-line program names, table extraction already merges breaks, but we could improve matching by using bounding boxes to group words based on positions. As for RAG schema enrichment, it would be better to embed richer semantic information with fields like "career_outcomes," "skills," and "tools," avoiding hallucinations by using curated mappings and synonyms for consistency.
-Zero Garbage and automated grade extraction improvements
-
-For zero garbage, we could improve it using structural filters to remove irrelevant elements, and by building a "boilerplate fingerprint" dataset to identify repeated content. For grade extraction, we could expand the PDF discovery to include key terms like "rezultate" and "ultima medie" and use safer methods to extract the last admitted grade via explicit statement lines.
-Planning Phase 8 with matcher fix and admissions grade pipeline
-
-For Phase 8, I’m proposing several improvements. Option B involves using regex and table extraction, carefully validating the results. We also need to fix the matcher bug, unify the run context, and then tackle admissions grade extraction as a separate pipeline. The goal is to avoid errors while improving scaling cross-university.
-Improving PDF parsing and scaling mechanisms
-
-I’m thinking of ways to improve processing multiple PDFs, and I’m considering making year dynamic and adding document type classification. For scalability, we could introduce a "university adapters" interface and consider switching to SQLite for better performance. Additionally, I'll propose steps to handle cached content and ensure idempotency.
-Thought for 15m 45s
-
-Done
-
-
-response:
-Below is a senior-architect audit of your Phase 7 system with **blunt criticism**, concrete redesigns, and a **Phase 8 plan** that supports (1) higher recovery, (2) stronger hygiene, and (3) scaling beyond UCV without turning into a blacklist museum.
-
----
-
-## What’s strong already (and worth keeping)
-
-* Your “Bronze → Silver → Enrichment → RAG” lifecycle is the correct backbone for a *traceable* admissions dataset. `BaseScraper.save_snapshot()` + entity persistence is exactly the right instinct for auditability. 
-* The **faculty isolation** decision (PDF-only for hostile faculties) is the right move for **Zero Garbage**. Your docs show you learned that regex whack‑a‑mole fails.
-* The Hybrid PDF parsing concept (Tier 1 tables → Tier 2 text/regex) is a good direction, but the Tier 2 signals need better guardrails.
-
-Now the hard part:
-
----
-
-## 🚨 Critical correctness issues (fix before anything else)
-
-### 1) **Matcher fusion is broken (dead code via indentation)**
-
-In `matcher.py`, the loop that should apply matches and write back `spots_budget/spots_tax` is accidentally indented **inside `_infer_career_paths()` after a `return`**, so it never runs. That means **HTML programs are never enriched from PDF** in the normal path. 
-
-**Impact:** your “Fusion Engine” is currently mostly a “PDF-only synthesizer” plus a no-op for normal enrichment.
-
-**Phase 8 must-fix:** Move the `for res in results:` loop back into `_fuse_data()` right after `results = matcher.match_all()`.
-
----
-
-### 2) **Your Program ↔ Faculty link is inconsistent**
-
-In `scraper.py` you generate a real faculty UID:
+`execution/scrapers/registry.py`:
 
 ```py
-faculty_uid = ProvenanceMixin.generate_uid(f"faculty:{slug}")
+# registry.py
+from typing import Dict, Type
+from execution.scrapers.adapter_interface import UniversityAdapter
+
+REGISTRY: Dict[str, Type[UniversityAdapter]] = {}
+
+def register(slug: str):
+    def deco(cls):
+        REGISTRY[slug] = cls
+        return cls
+    return deco
+
+def create_adapter(slug: str) -> UniversityAdapter:
+    try:
+        return REGISTRY[slug]()
+    except KeyError:
+        raise ValueError(f"Unknown university slug: {slug}. Known: {sorted(REGISTRY)}")
 ```
 
-…but when creating `Program`, you set `faculty_uid=slug` instead of `faculty_uid=faculty_uid`. 
-
-**Impact:** you can’t reliably join Programs to Faculty entities across runs/universities. It “works” only because everything downstream assumes slug, not UID.
-
-**Phase 8 must-fix schema decision:**
-
-* Either rename `faculty_uid` → `faculty_slug` in Program and introduce a real `faculty_id` field; **or**
-* Keep `faculty_uid` as a proper UID and add `faculty_slug` separately.
-
-Right now it’s a semantic lie.
-
----
-
-### 3) You “recovered” Agronomie, but it might be semantically wrong
-
-Your PDF regex includes `DISCIPLINA` as a trigger for program extraction (`p1` and `p3`). 
-Your recovered Agronomie program comes from a **GRILE** PDF and looks like it was extracted from a “DISCIPLINA: …” header.
-
-That can be:
-
-* a real master program name **or**
-* an admission-test subject / discipline name **not equal** to a program.
-
-**This is a major Zero Garbage risk**: “clean text” ≠ “correct entity”.
-
-Phase 8 needs an explicit distinction:
-
-* **Program-of-study evidence** vs **discipline/test evidence** vs **generic headings**.
-
----
-
-### 4) Hard-coded year/timestamps will kill scaling
-
-Examples:
-
-* `current_year = "2026"` in `_identify_spots_pdf()` 
-* `scraped_at = "2026-01-28T12:00:00Z"` placeholder in synthesis 
-* `admission_year = 2026` hard-coded in multiple places
-
-**Impact:** you can’t run multi-year, multi-university, reproducible pipelines.
-
----
-
-## Challenge 1: Data recovery — “Truth PDF” selection needs to be evidence-driven, not keyword-driven
-
-### Current state (problem)
-
-`_identify_spots_pdf()` scores PDFs using link text + URL keywords + hard-coded year. 
-This fails in exactly the case you described: **multiple conflicting PDFs**, scanned vs digital, “ghid/grile/pliant” that contain no seats, etc.
-
-Also: link text is frequently garbage (“document.pdf”, “click here”, CMS titles).
-
-### Phase 8 upgrade: turn PDF selection into a *two-stage ranking problem*
-
-#### Stage A — Candidate discovery (cheap)
-
-Keep your existing “global PDF sweep” (that’s good), but store richer metadata at discovery time:
-
-* anchor text
-* surrounding heading text (closest `<h1-h4>`)
-* URL path tokens
-* file name tokens
-* discovered_from_url
-* discovered_from_faculty_slug
-* http headers (Content-Length, Last-Modified, ETag if available)
-
-This makes ranking less blind.
-
-#### Stage B — Candidate evaluation (truth comes from extraction quality)
-
-For each candidate, do a **lightweight parse** and compute a quality score:
-
-**Per-PDF extraction metrics (examples)**
-
-* `text_len`: total extracted text characters (detect scanned PDFs: near 0)
-* `rows_total`: extracted rows count
-* `rows_with_spots`: rows where budget/tax parsed
-* `spots_ratio = rows_with_spots / rows_total`
-* `unique_program_names`
-* `garbage_ratio` (rows hit blacklist like “semnatura”, “copie”)
-* `year_detected` inside PDF text (not URL)
-* `doc_type_detected`: “cifra de școlarizare”, “repartizare”, “rezultate”, “grile”, “metodologie”, etc.
-
-Then rank candidates by:
-
-* **primary:** `spots_ratio` and `rows_with_spots`
-* **secondary:** `year_match`, `doc_type_priority`
-* **tertiary:** matchability against existing known program names (if HTML programs exist)
-
-This will pick the “Truth PDF” based on **what it yields**, not what it’s called.
-
-#### Conflict resolution: don’t pick one “Truth PDF” globally; resolve per-field
-
-If two PDFs disagree:
-
-* Seats (spots) from a “Cifra de școlarizare” PDF should beat a “Ghid”.
-* Last admission grade should come from “Rezultate finale” not from “Metodologie”.
-* If both are “cifra”, prefer the one whose internal year matches and has higher extraction confidence.
-
-**Store provenance per field**, not just per program:
-
-```json
-"evidence": {
-  "spots": {"pdf_url": "...", "page": 2, "row": 17, "confidence": 0.92},
-  "last_grade": {"pdf_url": "...", "page": 5, "confidence": 0.80}
-}
-```
-
-That’s how you scale + debug.
-
----
-
-## Challenge 2: Regex robustness — you removed catastrophic backtracking, but you still have Romanian/layout edge-case bombs
-
-### What you fixed
-
-Bounding `[\s\S]{0,300}?` etc. reduces worst-case hangs. Good. 
-
-### Remaining high-risk edge cases
-
-#### 1) Line breaks / hyphenation inside names
-
-PDF text often breaks:
-
-* `Ingineria\nsistemelor`
-* `Tehnologii informa-\ntice`
-
-Your `p1` name capture does **not** include newlines, so it will truncate or miss. 
-
-**Fix:** normalize hyphenation before regex:
-
-* replace `"-\n"` with `""`
-* replace `"\n"` with `" "`
-  Then run patterns.
-
-#### 2) “DISCIPLINA” is dangerous
-
-As above: it can produce non-program entities.
-
-**Fix options (pick one):**
-
-* Remove `DISCIPLINA` entirely from program extraction patterns.
-* Or only allow it if the PDF is classified as “program list” and not “grile”.
-* Or treat “DISCIPLINA” matches as **secondary** evidence requiring confirmation against a real program list.
-
-#### 3) p2 assumes Title Case, fails on ALL CAPS and bullet/numbered lines
-
-Your p2 starts with `^([A-ZȘȚĂÂÎ][a-zșțăâî]+...)`.
-Many PDFs are **ALL CAPS** or start with `1.` or `-`. 
-
-**Fix:** support:
-
-* leading bullets/numbers
-* ALL CAPS words
-* commas, parentheses, “și”, “&”, “/”
-
-#### 4) You parse “taxă” and “taxa”, but “cu taxă” and “taxă” appear in many forms
-
-You already handle `tax[aă]` in p1, but p2 uses `tax` only, so it’ll match almost anything. 
-
-**Fix:** require a more specific tax token, e.g. `tax(?:a|ă)\b|cu\s+tax`.
-
-### Phase 8 improvement: stop treating PDFs as a single blob
-
-Instead of `full_text = "\n".join(...)`, process page-by-page:
-
-* You get page numbers for provenance.
-* You avoid cross-page false matches.
-* You can early-stop once you’ve extracted a high-confidence table.
-
----
-
-## Challenge 3: RAG schema enrichment — your “Advisor Pitch” is too thin and mixes facts with guesses
-
-### Current state (problems)
-
-`rag_converter.py` uses:
-
-* heuristics from program name for careers
-* generic admission req strings
-* keywords built from tokens 
-
-This produces embeddings that:
-
-* are not consistent across universities,
-* don’t separate **facts** from **inferences**,
-* and won’t answer career questions well unless the program name contains obvious substrings.
-
-Also you hardcode `"ucv_"` in program_id generation, which will break cross-university scaling. 
-
-### Phase 8: Make RAG docs “fact blocks + career ontology block + provenance”
-
-For “career-rich” retrieval, don’t write one narrative string. Write **structured chunks** and then concatenate for embeddings.
-
-Recommended fields per document:
-
-* `facts`: only extracted truths (seats, duration, language, admission method, year)
-* `career_hypotheses`: inferred mappings + confidence + source (“inferred_from_name”)
-* `skills_keywords`: mapped skills/roles from a controlled vocabulary (ESCO/O*NET style) (can be offline)
-* `user_intents`: common student queries (“ce job-uri”, “ce materii”, “cât de greu”, “unde lucrezi”)
-* `provenance`: URLs + page numbers + extraction method
-
-Then build `text_for_embedding` from these sections with explicit labeling:
-
-> Facts: …
-> Career paths (inferred): …
-> Skills keywords: …
-> Evidence: …
-
-This dramatically improves retrieval for career questions while keeping “Zero Garbage” because you label the inferred part.
-
-**Important:** If you can’t ground “what you learn” in a syllabus, don’t invent it. Use:
-
-* “skills keywords” mapping as “likely skills”, not guaranteed curriculum.
-
----
-
-## Challenge 4: Zero Garbage — your blacklist strategy will not scale
-
-### Current state (problems)
-
-You have:
-
-* large hard-coded `BLACKLIST_PATTERNS` list in scraper 
-* ad-hoc noise keyword lists
-* cross-contamination list of OTHER_FACULTIES names 
-
-This does not generalize beyond UCV and will become unmaintainable.
-
-### Phase 8: “Iron Dome v2” = positive structural validation + conservative classifier
-
-#### 1) Replace blacklist-first with **positive candidate definition**
-
-Instead of “everything except blacklist”, define “program-candidate nodes” as nodes that satisfy **structural + textual** rules:
-
-Examples (HTML):
-
-* Located under a section whose heading matches `admitere`, `licență`, `master`, `programe de studii`
-* Repeats in a list/table where *multiple siblings* look like program names (pattern consistency)
-* Has either:
-
-  * a seats pattern (`\d+ locuri`) or
-  * appears in a program list section (validated by sibling density + title-case ratio)
-
-This generalizes across universities far better than enumerating “Burse, Cazare, Contact…”.
-
-#### 2) Add a lightweight ML classifier as a *negative filter*
-
-Train a small model on your own extracted nodes:
-
-* label `program` vs `noise`
-* features: text length, digit ratio, presence of contact patterns, DOM depth, tag name, href type, position (header/footer), sibling similarity, etc.
-
-Use it like:
-
-* if classifier says “noise” with high confidence → drop
-* otherwise still require structural rules to accept
-
-This reduces blacklists and improves portability while staying conservative.
-
-#### 3) Quarantine pipeline: don’t “drop silently”
-
-If a candidate almost passes, store it as:
-
-* `status: quarantined`
-* with a reason code: `no_structural_context`, `low_density`, `possible_nav`, etc.
-
-That’s how you scale without losing visibility.
-
----
-
-## “Last Admission Grade” extraction automation (missing today)
-
-You already have `last_admission_grade` in `Program` model. 
-So Phase 8 should add a **Grade Extraction pipeline** parallel to seats extraction.
-
-### The right approach (and a big privacy warning)
-
-Admission results PDFs often contain **personal data** (names, IDs). For a student chatbot dataset:
-
-* You should **never store candidate names/IDs** in your dataset.
-* Extract only aggregated stats: min admitted grade (last admitted), maybe counts.
-
-### Pipeline design
-
-**Stage 1: Discover “results/medii” documents**
-Extend PDF discovery scoring with a new doc_type:
-
-* positive keywords: `rezultate`, `liste`, `admis`, `respins`, `medii`, `clasament`, `repartizare`
-* negative: `cazare`, `burse`, etc.
-
-**Stage 2: Parse**
-Most result PDFs are tables:
-
-* columns often include grade like `9,35` (comma decimal)
-* status like `ADMIS BUGET`, `ADMIS TAXĂ`
-
-Parsing strategy:
-
-* table extraction (like you already do)
-* fallback line regex:
-
-  * grade: `(\d{1,2}[,.]\d{1,2})`
-  * status tokens
-  * program/specialization column if present
-
-**Stage 3: Aggregate**
-For each program + category:
-
-* `last_grade_budget = min(grades where status == admitted_budget)`
-* `last_grade_tax = min(grades where status == admitted_tax)`
-
-**Stage 4: Match to Program entities**
-Use the same `RomanianProgramMatcher` logic (but for grade rows). 
-
-**Stage 5: Store with provenance**
-Update fields and save evidence pointing to PDF + page.
-
-### Schema suggestion
-
-Your schema currently has one `last_admission_grade: float`. 
-In practice you want:
-
-* last grade for **budget**
-* last grade for **tax**
-* maybe also “final after appeals”
-
-So either:
-
-* add two fields, or
-* store a structured dict in metadata.
-
----
-
-## Phase 8: Concrete optimization plan (prioritized)
-
-### Phase 8.0 — “Stop shipping broken merges”
-
-1. Fix matcher indentation bug so enrichment actually runs. 
-2. Fix Program ↔ Faculty linkage semantics.
-3. Remove hard-coded years/timestamps; derive from run context/config.
-
-### Phase 8.1 — Evidence-driven PDF Truth Resolver
-
-* Replace `_identify_spots_pdf()` keyword score with:
-
-  * candidate discovery score (cheap)
-  * extraction quality score (truth)
-* Persist candidate evaluation metrics into `manifest.json` for audits.
-
-### Phase 8.2 — PDF parser hardening (without more regex fragility)
-
-* Normalize hyphenation and whitespace.
-* Page-by-page extraction with provenance.
-* Separate “Program list” vs “Discipline/test” doc types.
-* Require stronger evidence before PDF-only synthesis (avoid “DISCIPLINA” traps).
-
-### Phase 8.3 — Admission grade extractor (PII-safe)
-
-* Add a `grade_parser.py` module with:
-
-  * discovery + parsing + aggregation
-* Update Program fields (budget/tax grade variants).
-
-### Phase 8.4 — Iron Dome v2 (scales across universities)
-
-* Shift to positive structural validation.
-* Add a conservative node classifier (negative filter).
-* Build a quarantine & reason-code system.
-
-### Phase 8.5 — RAG enrichment that helps “career questions”
-
-* Generate two embedding chunks per program:
-
-  1. facts-only, fully grounded
-  2. career/skills mapping, labeled as inferred
-* Replace `ucv_` hardcoding with `university_code`.
-
----
-
-## Scaling beyond UCV: what must change in architecture
-
-### 1) Make “university adapters” real plugins
-
-Right now UCV-specific logic is hardwired into `UCVScraper`. 
-For multi-university:
-
-* `BaseScraper` stays
-* add `UniversityAdapter` interface:
-
-  * `discover_faculties()`
-  * `discover_admission_pages(faculty)`
-  * `extract_program_candidates(html)`
-  * `discover_pdfs(html)`
-  * `normalize_program(program_raw)`
-
-### 2) Centralize document classification and extraction scoring
-
-The “Truth Resolver” and “Extraction Quality Scorer” should be **shared core**, not per-university.
-
-### 3) Standardize IDs and schema
-
-Add fields to every Program:
-
-* `university_code`
-* `faculty_slug`
-* `program_slug` (stable normalized)
-* `program_id` derived from `(university_code, faculty_slug, program_slug, level, language)`
-  Stop using URL-based UIDs for identity. (URLs change.)
-
-### 4) Observability as a first-class product
-
-Per run, record:
-
-* programs extracted
-* programs enriched
-* PDFs evaluated
-* selected truth doc types
-* quarantined candidates + reasons
-
-This becomes your scaling safety net.
-
----
-
-## One last blunt note: your “Zero Garbage” policy currently measures *cleanliness*, not *truth*
-
-Your Phase 7 report says “100% clean” (no dorms, no contact info), which is good. 
-But “ECOLOGIA ȘI PROTECȚIA MEDIULUI” extracted from “GRILE / DISCIPLINA” is the canary: it might still be **wrong entity type** even if it’s not “noise”.
-
-**Phase 8 should add semantic hygiene**:
-
-* not just “not garbage text”
-* but “correct entity class with sufficient evidence”
-
-That’s how you scale safely.
-
----
-
-If you want, I can also propose a concrete **`PDFCandidateScore` dataclass + scoring formula** and a **refactor layout** for `matcher.py` into `pdf_selector.py`, `fusion.py`, `synthesizer.py` modules (still Python-only, no heavy ML required).
-
-3rd prompt:
-im using antigravity with gemini 3 pro to give him your instructions after you finish,and you can question me if you dont understand something about what im trying to achieve or need me to send aditional files
-thinking:
-Pro thinking
-Proposing optimizations and improvements
-
-I need to focus on Phase 8 optimizations, including auditing the multi-PDF retry loop, improving regex robustness, and enriching the schema. I'll propose more intelligent heuristics/ML, and scaling beyond UCV. Also, "Last Admission Grade" extraction needs automation. For technical code, I’ll check for bottlenecks in the loaded files.
-Inspecting potential indentation issue in matcher.py
-
-I suspect an indentation issue in matcher.py, especially with unreachable code due to the return statement in _infer_career_paths. To confirm, I'll need to open the full file and check its indentation. I'll use a container tool to view the file content and ensure everything is in order.
-Auditing and optimizing code for PDF processing and scaling
-
-Always show details
-bash -lc ls -l /mnt/data && sed -n '1,240p' /mnt/data/matcher.py
-
-Analyzed
-Extracting specific lines from file
-
-Always show details
-bash -lc sed -n '240,520p' /mnt/data/matcher.py
-
-Analyzed
-Identifying matcher.py bugs and proposing a fix
-
-There's indeed a significant indentation issue in matcher.py. Inside _infer_career_paths, unreachable code is incorrectly indented and belongs to _fuse_data. This prevents program updates in enrichment mode, leading to broken functionality. Additionally, in _fuse_data, misalignment in the "entity_type" and "source_type" keys needs fixing.
-Evaluating Python dict indentation and structure
-
-In Python, dict indentation technically doesn’t matter as long as the braces are correct, but alignment is important for readability. There seems to be inconsistent spaces before "entity_type", but it’s within the dict, so no syntax issue. However, line breaks after comments can cause readability issues, which may be worth addressing.
-Identifying issues in data pipeline and assumptions
-
-The comment ends a line of code, and the indentation is fine for the dictionary. However, there's a hardcoded scraped_at timestamp that should use the actual run timestamp or PDF modified date. The “Master” level should also be inferred from context. Additionally, the local_path in pdf_queue is missing and likely populated later in the process. Moreover, the keyword list in _identify_spots_pdf is too broad, potentially including irrelevant PDFs.
-Improving multi-PDF loop and candidate scoring
-
-The current multi-PDF loop scores candidates based on link text alone, but this needs to be improved by scoring the content after extraction. They also use a constant message “Attempting extraction... (Score: Best)” without showing the actual score or including it in the candidate dictionary, which is a lost opportunity. Additionally, the local_path may not be included in candidate items, yet that’s crucial for the process.
-Improving extraction validation and fixing logic flaws
-
-The current extraction validation is inconsistent. While it filters out "copie", it neglects other noise like "semnatura". There's also a redundancy in computing valid_rows twice, which could be misleading. Additionally, there's a bug where unreachable code prevents further processing after returning defaults. Time to inspect the regex patterns in pdf_parser.py for potential edge cases.
-Identifying issues in matcher and pdf_parser code
-
-Always show details
-bash -lc sed -n '1,260p' /mnt/data/pdf_parser.py
-
-Analyzed
-Discussing potential issues in pdf_parser
-
-There are a few concerns with the pdf_parser. First, table extraction may misalign or merge cells, leading to issues. The fallback method of using row indexes is fragile. Also, while filtering names based on length and blacklisting certain words, it may still pick up noise like headings or domain names. Lastly, the program name regex excludes punctuation, which could be problematic.
-Examining program name patterns in pdf_parser
-
-The program name extraction may miss some cases due to limitations in the patterns. For instance, it doesn't capture parentheses or certain punctuation common in names like "Artificial Intelligence and Applied Computing." Additionally, the second pattern fails if the program name is all caps, or contains abbreviations or roman numerals. There's also a problem extracting budget or tax info if the line doesn't follow a specific format.
-Clarifying budget and tax extraction logic
-
-The current pattern seems to extract numbers after program name, but it's a bit confusing. It first captures a number followed by "loc," and then later "buget" with another number for tax. The first number could represent total or budget. While the logic assigns the first number to budget and the second to tax, this might not always work as intended, depending on the structure.
-Addressing pattern limitations for program names and numbers
-
-The first number seems to represent the budget spots, and the second number typically refers to tax spots. However, the pattern struggles with slight variations, like no "locuri" before tax. It's mostly okay, but could break when names contain digits or parentheses. Also, the filter skips names with certain words like "MASTER" or "AGRONOMIE."
-Identifying possible issues with patterns and scanned PDFs
-
-The patterns could miss some variations like "Locuri la buget" or "Locuri finanțate de la buget" because of limited space handling. There's also a risk of backtracking, but it’s kept somewhat in check. Additionally, scanned PDFs could cause issues since extract_text might return empty results for these pages, leading to no matches. It's good that fallbacks exist for digital backups.
-Evaluating potential issues in PDF parsing logic
-
-Always show details
-bash -lc sed -n '1,260p' /mnt/data/scraper.py
-
-Analyzed
-Extracting code segment for continuation
-
-Always show details
-bash -lc sed -n '260,560p' /mnt/data/scraper.py
-
-Analyzed
-Refining scraper logic to manage redundancy and false negatives
-
-The scraper logic has some messy redundancy and dead code, like referencing PDF_ONLY_FACULTIES after an early return, and declaring it twice. There’s also risk in using broad blacklist patterns which might wrongly skip relevant programs — for example, policies that would exclude anything containing "Resurse," including key programs like "Managementul Resurselor."
-Addressing scalability and classification issues in the scraper
-
-Scaling to many faculties seems challenging due to the need for large blacklists and the limitations of pattern-based filtering. For example, patterns like "Programe" may accidentally filter out relevant programs. There's also inconsistent faculty name checking and URL misclassification. Additionally, the fixed duration year setup doesn't account for program variations such as 1.5 or 3 years.
-Considering how to handle spot extraction
-
-The logic for extracting spots from HTML is problematic due to multiple programs being combined in a single entry. For example, a program like "Master în Tehnologii Informatice" might list 13 budget spots and 8 tax spots, but concatenating them with other programs could cause confusion in the extraction process.
-Addressing unexpected data in program extraction
-
-It looks like the extraction process is pulling in too much extra information, like spot details directly into the program name, which complicates things. For example, a program name like "Master în Artificial Intelligence" is followed by spot details like "2 locuri la buget," but this should ideally be cleaned out for clarity and accuracy.
-Refining data consistency in program and faculty linking
-
-The code treats slug as faculty UID but also uses hashed UID for the Faculty entity, creating inconsistency. It should either unify or separate slug and UID for clarity. There might be a design change, but such inconsistencies could break data linking, especially when scaling to more universities.
-Identifying scraper logic and design issues
-
-Always show details
-bash -lc sed -n '1,260p' /mnt/data/rag_converter.py
-
-Analyzed
-Improving program scaling and narrative structure
-
-The year 2026 needs to be dynamic, derived from run_id or config. Also, the university-specific ID should be flexible, incorporating university codes. As for program validation, switching to Pydantic could be useful. For the narrative pitch, to make it more helpful for career guidance, we could structure the content using consistent sections while ensuring no unverified claims are included.
-Improving program data model and validation
-
-To enhance data, we could add fields like “program_name_clean”, “degree_level”, “faculty_name”, and others for clarity. The narrative should come from extracted data, but we can map it to "skills" and "occupations" for richness while using external resources. Improving validation would involve positive checks like ensuring program nodes are within specific HTML structures.
-Refining extraction process using classifiers and modular architecture
-
-Instead of relying on blacklists, I could use semantic scoring with a small ML classifier to label nodes as "program candidates" or "noise". The classifier could use features like text length and numeric patterns. For scaling, I could set up a modular architecture where each university has its own extraction configuration based on HTML and PDF types.
-Optimizing PDF selection and conflict resolution
-
-Instead of selecting PDFs by link text, I could parse each candidate PDF and calculate quality metrics. This would involve checking row counts, program coverage, and the presence of key headers. For conflict resolution, I'd keep both PDFs and mark any discrepancies, while choosing the most reliable based on contextual factors.
-Handling unresolvable conflicts and OCR integration
-
-When a conflict can't be resolved, I may choose to exclude or mark the uncertain field. For scanned PDFs, I could integrate OCR as a last resort using libraries like Tesseract or PaddleOCR. I'll need to focus on high precision and avoid noisy data. For admission grades, I’ll expand the search and ensure strict personal data protection.
-Addressing data extraction and architecture concerns
-
-When extracting grades from PDFs, I need to ensure I don't accidentally store personal names. I can calculate minimum grades while discarding row-level details. For scaling, I should create a general pipeline with configurable steps across universities. I must also be critical and address design flaws, dataset anomalies, and the "Zero Garbage" requirement, incorporating validation and unit tests.
-Citing files and scaling to multiple universities
-
-I will cite relevant files, using the filecite notation for each, as the instructions specify the need for citations from uploaded files. For scaling to more universities, I'm considering a multi-tenant design with a modular system for university-specific configurations, leveraging an abstract adapter for various tasks like faculty discovery and PDF parsing.
-Proposing multi-university system and PDF "truth" selection
-
-The idea is to standardize the output schema for each university, incorporating stable IDs. We also want to use a central document store and normalize tokens. For PDF scraping and parsing, asynchronous methods could be used, with caching to avoid reprocessing. A “Truth PDF selection algorithm” could help resolve conflicts across PDFs, evaluating based on various metrics. Let's also ensure “garbage canary” lists for tests, evaluating for zero errors.
-Improving PDF parsing and evaluation
-
-We can unify the process by grouping PDFs by level (licenta/master) using keywords and selecting the best per group. For unsupervised clustering, a simple text embedding may help, but maintaining a "PDFCandidateEvaluation" object with various scores could be more practical. Optimization ideas include improving table extraction, refining regex patterns, and handling diacritics better. Improvements like using camelot, pdfplumber, or even adjusting extraction settings could help, though some require extra installation.
-Improving PDF parsing for diacritics and flexibility
-
-To improve parsing, I should normalize text by stripping diacritics and unifying terms like "locuri" to reduce diacritic issues. I can also use line-based parsing with sliding windows, and introduce alternative patterns to capture variations. A state machine-based approach for detecting program headings and flexibly parsing data could be beneficial for extracting admission results and processing statistics.
-Enhancing PDF parsing and processing flow
-
-To improve this process, I’ll ensure to capture only numeric data, leaving out personal information. I'll refine the parser to handle HTML pages, introduce a scoring system, and implement quality gates to filter out noise. Using proven strategies like boilerplate removal, structure analysis, and lineage fingerprinting, I'll optimize for scaling and accuracy. A more modular architecture with the ability to track document provenance and handle different formats (PDF/HTML) will help streamline future updates.
-Improving RAG converter and last admission grade extraction
-
-We’ll restructure the narrative into manageable sections, adding necessary fields like faculty name and program-related data while avoiding hallucinated information. For Zero Garbage, replacing manual blacklists with automated noise detection using frequency analysis and a potential ML classifier should offer better accuracy. Regarding admission grade extraction, a new pipeline needs to ensure privacy and scalability, with features like plugin architecture and config unification. A quick analysis on dataset quality could help surface common noise.
-Evaluating architecture, scraping, PDF extraction, and improvements
-
-Always show details
-import json, re, statistics, os, textwrap, math, collections, pandas as pd, numpy as np, pathlib, itertools
-path="/mnt/data/rag_dataset.json"
-data=json.load(open(path,encoding="utf-8"))
-len(data), data[0].keys()
-
-Analyzed
-Validating input for digits in names
-
-I should check for any digits included in program names or other fields. This will help avoid errors and ensure accurate extraction. If I find anything like this, I'll need to clean or filter out those values immediately to maintain data integrity. Let's proceed carefully with that check.
-Identifying names containing digits
-
-Always show details
-digit_names=[d for d in data if re.search(r'\d', d.get('name',''))]
-digit_names
-
-Analyzed
-Checking for program names with digits and length
-
-Only one program name includes digits, which could be considered noise. I should also check for long program names, as they may contain extra information like "spots". Let's analyze the lengths of these program names to identify any that might include unnecessary details or cause issues.
-Computing name lengths and basic statistics
-
-Always show details
-lengths=[len(d.get('name','')) for d in data]
-lengths, statistics.mean(lengths), max(lengths), min(lengths)
-
-Analyzed
-Identifying issues with program names and spots
-
-The longest program name, "133," is likely one with "spots" appended, meaning the name wasn't properly cleaned. I also need to check if "spots_budget" or "spots_tax" are missing for some programs. It seems like the issue could be broken matching or missed parsing, especially since only the English program extracted "spots" correctly. I'll compute the missing spots next.
-Computing missing spots data
-
-Always show details
-missing=[d for d in data if d.get('spots_budget') is None and d.get('spots_tax') is None]
-len(missing), [d['name'] for d in missing]
-
-Analyzed
-Addressing missing spots and extraction issues
-
-So, 5 out of 6 spots are missing. For ACE, the failure to extract from the PDF might be due to a table extraction or matching bug. However, the dataset suggests they tried parsing spots from HTML, with only one potentially successful extraction. I'll need improvements here! I should also check for "accuracy_confidence." Let’s compute that next.
-Evaluating data source and accuracy confidence
-
-Always show details
-[(d['name'], d.get('source_type'), d.get('accuracy_confidence')) for d in data]
-
-Analyzed
-Addressing missing accuracy confidence and checking style
-
-The "pdf_only" has "accuracy_confidence" set to None because it wasn’t properly set in the synthesized program — I should ensure it's being set. Now I need to check the text_for_embedding to understand its style. That’ll give insight into possible improvements or adjustments.
-Checking text_for_embedding style
-
-Always show details
-for d in data:
-    print(d['program_id'], d['text_for_embedding'])
-
-Analyzed
-Improving narrative depth and checking architecture
-
-The narrative is currently just a single sentence, so it lacks richness. To improve this, I need to review "walkway_v7," which explains the design, as well as the relevant architecture file. I’ll also check the architecture doc to get more context and enhance the richness of the narrative.
-Extracting architecture details from document
-
-Always show details
-bash -lc sed -n '1,240p' /mnt/data/architecture_v6_system_overview.md
-
-Analyzed
-Identifying code and architecture issues
-
-The architecture doc is just a summary that we can cite, and Walkthrough v7 has useful details for citations as well. I'll also check task.md, though it’s not critical. As for the code, there are several issues — an unused pdf_parser in UCVScraper, inconsistent use of snapshots_dir, and leftover unused code. These need to be cleaned up.
-Analyzing and proposing code improvements
-
-The path for faculty and program entities seems fine, but there are a few issues. For instance, finalize writes the manifest without specifying encoding, and UCVScraper.finalize defaults to ASCII, which should be explicitly defined. Additionally, the loop adds slugs to successful but not failed entries, affecting accuracy. It’s wrong to count success if certain tasks fail, so I’ll suggest improvements that align with their "Zero Garbage" priority.
-Structuring final proposal for improvements
-
-The plan should cover key areas such as architectural issues, multi-PDF selection, improving PDF regex robustness, and enhancing the Iron Dome with structural heuristics and ML gating. The RAG schema should be enriched for semantic richness and based on career queries. I'll also touch on scaling methods, plugin architecture, and provide pseudocode to ensure clarity for a future model’s implementation. Each section should be actionable for better user clarity.
-Delivering the answer with optional questions
-
-I should deliver a comprehensive response now, even without relying on external clarifications. I can include optional follow-up questions at the end if useful but shouldn't ask for confirmation. However, I’ll include optional questions for deeper insights. Also, I must remember to mention the current date, January 28, 2026.
-Proposing improvements for multi-PDF selection and scaling
-
-The current code hard-codes "2026," which should not be the case for scaling. For data recovery, I suggest a multi-PDF retry loop with a more efficient scoring system based on metadata and parsing quality metrics like extracted rows, validity, and scan score. Conflict resolution should focus on per-program selection. Caching and document classification could streamline the process. Also, current thresholds may be too broad, and the year fallback will break eventually.
-Proposing improvements for PDF candidate selection and parsing efficiency
-
-They currently stop after the first successful candidate, but that might miss a better option. I think a better approach is to evaluate all candidates, compute a quality score, and choose the best. I’m suggesting a two-stage process: a quick first-page scan followed by a full parse if needed. Also, adding useful metadata like surrounding headings could help select the right PDFs.
-Addressing potential breakage and schema enrichment
-
-There are several potential issues related to text encoding, punctuation, line breaks, and variations in terminology. I propose normalizing the text, handling hyphenation and diacritics, and using regex for more consistent detection. For schema enrichment, it’s important to structure the information for career queries, ensuring factual accuracy, and adding relevant synonyms and competency mappings.
-Improving retrieval and zero garbage
-
-For better retrieval, I'll structure content with labeled sections like "Ce înveți", "Unde poți lucra", and include trusted evidence snippets like source_quotes to boost credibility. To reduce clutter, it’s better to implement automatic filtering, such as boilerplate removal, frequency analysis, and stricter page structure checks. This ensures better quality. Also, for scaling, using domain-specific mappings and cleaner data handling may help in dealing with multiple universities.
-Proposing architecture improvements
-
-To improve the process, I suggest decoupling components like the "Crawler", "Document discovery", "Extractor", and "Normalizer". Using a DAG orchestrator might be too heavy, so I’m considering internal pipeline with CLI. Additionally, proposing changes in error handling, logging, and unifying the data structures with Pydantic models could address existing code smells and inconsistencies, like in language handling or missing fields in models.
-Proposing improvements for scraping and scaling
-
-I noticed some Python style issues in scraper.py, like imports inside functions. For PDF extraction, an optimization would be to parse text and tables in one pass or avoid unnecessary page parsing. Implementing caching and detecting scanned pages could also boost efficiency.
-
-For scaling with more universities, we need to address dynamic content handling, and it seems like the BrowserManager isn’t used. We may also need a headless browser for anti-bot measures, though this wasn't explicitly asked for. Let’s focus on clear, constructive changes.
-Thought for 24m 25s
-
-Done
-
-
-response:
-Below is a blunt, senior-architect audit of what you have right now, what’s fragile, and what I’d do in **Phase 8** to (a) recover more data safely, (b) keep **Zero Garbage**, and (c) scale beyond UCV.
-
-I’m going to be intentionally critical because you asked for it.
-
----
-
-## 0) Stop-the-line findings (critical bugs / integrity risks)
-
-### A. **Your HTML→PDF enrichment is currently broken**
-
-In `matcher.py`, `_fuse_data()` never applies matches back onto HTML programs. It stops at:
+Each adapter:
 
 ```py
-matcher = RomanianProgramMatcher(programs, pdf_rows)
-results = matcher.match_all() # ... logic continues
+from execution.scrapers.registry import register
+
+@register("ucv")
+class UCVAdapter(UniversityAdapter):
+    ...
 ```
 
-…but the “logic continues” part is **accidentally indented inside `_infer_career_paths()` after a `return`**, making it unreachable. That means **non–PDF-only faculties never get PDF-enriched spots at all**, even if your PDF parser succeeds. This is a *huge* correctness gap. 
-
-**Impact:**
-
-* The “Multi-PDF Retry Loop” may be extracting rows, but they’re not actually merged into the dataset for standard faculties.
-* You’ll think coverage is improving, but the gold layer isn’t actually changing.
-
-**Fix (minimum):**
-
-* Move the `for res in results:` block back into `_fuse_data()` (and add unit tests that assert spot fields change after enrichment).
-
----
-
-### B. Hard-coded time/year is poisoning portability + future runs
-
-You hard-code:
-
-* `current_year = "2026"` / `fallback_year = "2025"` in `_identify_spots_pdf()` 
-* `admission_year = 2026` in `rag_converter.py` 
-* `scraped_at = "2026-01-28T12:00:00Z"` in PDF-only synthesis 
-
-**Impact:**
-
-* Extending to multiple universities and multiple admission cycles becomes a mess.
-* You will mis-rank PDFs when the URL contains an upload year that differs from admission year (very common).
-
-**Fix (minimum):**
-
-* Derive `admission_year` from `run_id` or config, and store it in a single “run context” object passed everywhere.
-
----
-
-### C. `faculty_uid` semantics are inconsistent
-
-* In the scraper you create a `Faculty` with `uid=hash("faculty:slug")` 
-* But programs store `faculty_uid=slug` (not the faculty UID) 
-* Your `Program` model says `faculty_uid` is “UID of parent faculty” 
-
-**Impact:**
-
-* Cross-entity linking is inconsistent; future “multi-university” will break when you rely on stable relationships.
-
-**Fix (minimum):**
-
-* Rename program field to `faculty_slug` (string) and add `faculty_id` (stable UID).
-* Or keep `faculty_uid` as UID and add `faculty_slug` explicitly.
-
----
-
-### D. Your program names are not reliably cleaned
-
-Example in `rag_dataset.json`:
-`"Master în Artificial intelligence and applied computing ... 2 locuri la buget și 11 locuri cu taxă"` is stored as the program name. 
-
-That is not “zero garbage”; it’s *structured noise* embedded into the primary key field.
-
-**Fix (minimum):**
-
-* If spots were extracted from the same text line, strip the spots phrase from the name deterministically.
-
----
-
-## 1) Challenge: DATA RECOVERY — “Truth PDF” selection when multiple PDFs conflict
-
-### What you have now
-
-* Scraper does a **global PDF sweep** and stores `pdf_queue.json` (good) 
-* Matcher ranks candidates using a heuristic score based on keywords + year in link/url 
-* Then it iterates candidates until extraction yields “enough valid rows” (good instinct) 
-
-### Why it will fail as you scale
-
-1. **Keyword ranking isn’t doc-type aware.**
-   You treat “grile/ghid/pliant” as positive keywords for “spots PDFs”  — that’s exactly how you end up extracting a *discipline name* from a “GRILE” PDF (as you did for Agronomie), but not actual spots. 
-
-2. **Year heuristics are unreliable.**
-   Upload paths often contain a posting year, not the admission year.
-
-3. **You have no “conflict arbitration”.**
-   If two PDFs produce different spot counts, you don’t model conflict; you just take “first that passes validation”.
-
----
-
-### Phase 8 approach: Evidence-based PDF arbitration (fast + correct)
-
-#### Step 1 — classify each PDF candidate (doc type + year) before extraction
-
-Add a lightweight “probe” pass per candidate:
-
-* Extract first page text only (`page.extract_text()`).
-* Compute a `DocType` score:
-
-  * `SPOTS` if it contains strong anchors: `("cifra de scolarizare" OR "capacitate de școlarizare") AND ("buget" OR "taxă")`
-  * `RESULTS` if it contains: `("admiși" OR "respinsi" OR "rezultate" OR "clasament") AND ("medie")`
-  * `METHODOLOGY` if it contains: `("metodologie" OR "regulament")`
-  * `EXAMS/GRILE` if it contains: `("grile" OR "subiecte" OR "bibliografie")`
-
-This alone prevents the “GRILE picked as spots” failure mode.
-
-#### Step 2 — compute an extraction quality score per candidate
-
-After running extraction (tables + text fallback), score the output:
-
-**Quality metrics I’d calculate:**
-
-* `row_count`
-* `%rows_with_numeric_spots` (budget or tax present)
-* `name_entropy` (are names diverse, or repeating “Semnătură / Copie / Total”)
-* `noise_ratio` (how many rows got blacklisted)
-* `structure_confidence`: table strategy success > text strategy > name-only strategy
-* `scanned_likelihood`: total extracted characters / pages (near zero → scanned)
-
-Then rank by:
-
-`TruthScore = DocTypeScore * 0.35 + YearConfidence * 0.15 + ExtractionQuality * 0.50`
-
-…and **only accept** candidates passing thresholds like:
-
-* `row_count >= 3` (configurable per faculty)
-* `%rows_with_numeric_spots >= 0.6` for “spots” documents (strict)
-* If scanned: require a digital backup or skip (maintain Zero Garbage)
-
-#### Step 3 — model conflicts instead of silently overwriting
-
-If two high-quality PDFs disagree:
-
-* Store both as evidence and mark a `conflict_flag`.
-* Choose “truth” by:
-
-  1. higher extraction quality,
-  2. stronger doc-type anchors,
-  3. higher year confidence,
-  4. presence of “RECTIFICARE/ERATĂ” (often overrides earlier PDFs).
-
-**This is the scalable fix.** It works across universities because it’s evidence-driven, not UCV-specific.
-
----
-
-## 2) Challenge: REGEX ROBUSTNESS — you fixed catastrophic backtracking, but you still have Romanian edge cases
-
-Your fix (bounded wildcards) is good. 
-But your patterns are still brittle in ways that will show up the moment formats change or you add new universities.
-
-### Key regex fragilities
-
-#### A) Program name character class is too narrow
-
-Pattern 1 captures names with:
-`[A-Za-zȘȚĂÂÎșțăâî \-]+` 
-
-This fails on common real-world program strings like:
-
-* parentheses: `(... IFR)`
-* commas: `Inginerie, profil X`
-* ampersands: `Management & marketing`
-* slashes: `Biochimie/biotehnologii`
-* digits: `Securitate cibernetică 2.0` (rare but possible)
-* quotes/apostrophes
-
-**Fix:** capture “until next anchor” instead of whitelisting characters. Example strategy:
-
-* Normalize whitespace
-* Use a lazy capture: `(.+?)` bounded by “Locuri buget” anchor, with a max length guard.
-
-#### B) Case/layout variations (“LOCURI BUGETATE”, “finanțate de la buget”, “cu plată”)
-
-You match `Locuri buget` and `Locuri tax[aă]` 
-But many PDFs use:
-
-* `Locuri finanțate de la buget`
-* `Locuri bugetate`
-* `Locuri cu taxă` / `cu plată`
-* Sometimes no “Locuri” word per column (table headings only)
-
-**Fix:** expand anchors into synonym groups *and* prefer table extraction with explicit column detection when possible.
-
-#### C) Uppercase-only programs break pattern 2
-
-Pattern 2 expects Title Case-ish words: 
-It will miss:
-
-* `ECOLOGIA ȘI PROTECȚIA MEDIULUI` (you only recover it via p3)
-* other faculties that use uppercase program lists
-
-**Fix:** add a second line-item regex for uppercase lines, or normalize by lowering then using capitalization-insensitive token rules.
-
----
-
-### Phase 8: Make regex safe by design
-
-1. **Normalize text first** (NFKD, strip combining marks, map `ş/ț` variants) once per PDF, not ad-hoc replacements.
-2. **Line-based parsing** instead of giant `finditer` over full_text for the weaker patterns:
-
-   * iterate `for line in full_text.splitlines():`
-   * apply small regexes on each line
-   * use windowed context (previous/next lines)
-
-This removes most backtracking risks and is more robust to layout changes.
-
-3. **Add a “regex test suite”** (gold strings) per doc type:
-
-* include diacritics variants
-* include line breaks inside program names
-* include OCR-like errors (if you later add OCR)
-
----
-
-## 3) Challenge: SCHEMA ENRICHMENT — your “Advisor Pitch” is too thin and partly duplicated
-
-Right now the narrative is:
-
-* generic,
-* hard-coded year,
-* and your “career paths” are very shallow heuristics. 
-
-Also you generate `text_for_embedding` in *two places*:
-
-* matcher PDF-only synthesis generates it 
-* rag_converter also generates it 
-
-That guarantees divergence and inconsistent embedding style.
-
----
-
-### Phase 8: Make RAG documents “semantic-first” but still Zero Garbage
-
-**Principle:** anything “inferred” must be explicitly labeled as inferred and should come from a controlled ontology, not creative prose.
-
-#### A) Split your RAG doc into: Facts vs Inferences
-
-Add fields like:
-
-* `facts`: extracted from HTML/PDF only
-* `inferred`: derived from deterministic rules/ontologies
-* `provenance`: list of sources + extraction method + confidence
-
-Example shape:
-
-```json
-{
-  "program_id": "...",
-  "facts": {
-    "name": "...",
-    "level": "...",
-    "faculty": "...",
-    "spots": {...},
-    "admission": {...}
-  },
-  "inferred": {
-    "field_of_study": "Computer Science",
-    "career_clusters": ["Software", "Data"],
-    "skills": ["programming", "algorithms"]
-  },
-  "provenance": [...]
-}
+Runner:
+
+```py
+from execution.scrapers.registry import create_adapter
+adapter = create_adapter(args.uni)
+BaseScraper(run_id=..., adapter=adapter).run()
 ```
 
-#### B) Replace “narrative” with a structured embedding template
+This avoids auto-import weirdness and stays very explicit.
 
-Instead of prose, generate a consistent, dense, retrieval-friendly block:
+**Alternative (auto-discovery):** scan subpackages under `execution.scrapers` and import `adapter.py` modules dynamically. This reduces boilerplate but increases “import side effects” risk (importing 50 modules every run). I’d only do it if you *really* want “drop-in new folder = auto available”.
 
-* What it is (level + field)
-* What you’ll learn (controlled tags)
-* Where it leads (career clusters)
-* Admissions signals (facts only)
-* Keywords/synonyms (normalized)
-
-This embeds far better than conversational filler and avoids hallucination.
-
-#### C) Introduce a controlled “Career Ontology”
-
-Even a small hand-curated mapping beats heuristic substring checks like `"mec" in name`. 
-
-Start with:
-
-* Romanian keywords → `field_of_study`
-* `field_of_study` → career clusters
-* career clusters → job titles
-
-And store:
-
-* `inference_confidence`
-* `inference_rule_id`
-
-This is scalable across universities: the ontology is shared.
+**When to use “real plugins” (entry_points):**
+Only if you expect 3rd parties to ship adapters separately (pip-installable). For your internal project, a registry is enough.
 
 ---
 
-## 4) Challenge: ZERO GARBAGE — your Iron Dome is currently “blacklist whack-a-mole”
+## 3) Configuration vs Code: should selectors go into YAML?
 
-You’ve got large hard-coded keyword lists and blacklist regex patterns in the scraper. 
-That will not scale beyond UCV (or even beyond one UCV faculty style).
+You already started the right direction: **faculty definitions and concurrency settings** exist in `config.yaml`.
+But most extraction logic is still hard-coded in `UCVAdapter` (container selection, regexes, blacklist patterns, PDF-only faculties, keyword lists). 
 
-### Why blacklists won’t scale
+### Recommendation: a hybrid rule
 
-* Every new university → new navigation labels → new false positives → new blacklist entries.
-* Every redesign breaks the assumptions.
+* Put **stable, declarative things** in YAML.
+* Keep **algorithmic logic / fallbacks** in Python.
 
----
+If you go “YAML-only”, you’ll inevitably invent a DSL for:
 
-### Phase 8: Replace blacklist-first with **positive structural validation**
+* state (“current_domain” tracking),
+* heuristics,
+* multi-step extraction,
+* conditional rules,
+* post-processing normalization.
 
-#### A) Build a “Program Candidate Scoring” model (no ML needed)
+That DSL becomes harder to test than Python, and you’ll end up reimplementing Python poorly.
 
-For each extracted text node / list item, compute a score:
+### What belongs in YAML (high ROI)
 
-**Positive signals**
+Move these from code to config (because they vary per site and don’t require algorithms):
 
-* appears under a heading containing: `("Programe de studii", "Oferta educațională", "Admitere")`
-* contains level tokens: `licență/master/doctorat`
-* contains spots tokens: `locuri/buget/taxă`
-* length in plausible range (e.g., 10–140 chars)
-* low link density (nav menus are high link density)
+1. **Faculty list, URLs, and flags**
 
-**Negative signals**
+* `faculties[].pdf_only: true`
+* `faculties[].levels: ["Licenta","Master"]` or similar
 
-* contains phone/email/address patterns
-* contains pure navigation terms (“Acasă”, “Contact”, “Căutare”)
-* is a known faculty name list (cross-contamination)
+UCV currently hard-codes `PDF_ONLY_FACULTIES = ["agronomie"]`. That should be per-faculty config. 
 
-Accept only if score ≥ threshold, else drop.
+2. **HTML container selectors (fallback list)**
+   UCV uses:
 
-This removes the need for dozens of brittle blacklist entries.
+* `div#continut_standard` or `div#main_content` else whole doc. 
+  These are perfect to externalize as a list.
 
-#### B) Add DOM-context features
+3. **PDF candidate extraction rules**
+   Most universities: `a[href$=".pdf"]` is fine. Some: PDF links are hidden in JS or require regex.
 
-You already use a container `div#continut_standard` fallback. 
-Extend to capture:
+Keep a default “find all .pdf links”, but allow config to override:
 
-* nearest `<h1/h2/h3>` text
-* DOM depth
-* sibling counts
-* link density of parent
+* allowed domains
+* exclude patterns
+* include keywords/weights
 
-Those features generalize well across universities.
+4. **Grade PDF keyword scoring**
+   UCV uses `KEYWORDS` and `NEGATIVE_KEYWORDS` in code. That should be config so you can tune quickly when a site changes wording. 
 
-#### C) Optional ML classifier (only if you can label data)
+5. **Rate limiting / domain groups**
+   You already have `async_settings.domain_groups` in YAML, but the pipeline doesn’t use it yet.
+   That’s exactly the kind of thing that should live in config, not code.
 
-If you want ML later:
+### What should stay in Python (to avoid YAML DSL hell)
 
-* Create a labeling dataset from your quarantined nodes.
-* Train a conservative classifier (logreg or small transformer).
-* Use it only as an extra veto or extra confidence boost.
-* Keep a very high threshold to maintain Zero Garbage.
+Keep in Python:
 
----
+* multi-strategy extraction pipelines (“try table parse, fallback regex”), like your PDF parser already does 
+* normalization rules (diacritics, abbreviations) like in `RomanianProgramMatcher` 
+* any logic that depends on parsing structure and then taking actions (pagination discovery, JS-render handling)
 
-## 5) Architectural bottlenecks (current)
+### Critical add: validate YAML with Pydantic
 
-### Bottleneck 1 — tight coupling to “UCV specifics”
+Your adapters currently `yaml.safe_load` and silently fall back to `{faculties: []}` on missing file. 
+That’s nice for resilience, but at 50 universities it becomes a debugging nightmare (“why did it scrape 0 faculties?”).
 
-* Container IDs, keyword lists, PDF-only faculties, other faculties list: hard-coded. 
-  Scaling will mean duplicating code per university.
+Create `UniversityConfig` and `FacultyConfig` Pydantic models, then:
 
-### Bottleneck 2 — no explicit “document types”
-
-You treat PDFs as one bucket and try to guess which is “spots” via keywords. 
-You need a document registry + doc types to scale.
-
-### Bottleneck 3 — provenance isn’t first-class in fusion
-
-You store some metadata, but you don’t keep an evidence set per field. (You mostly overwrite fields.) 
-
-### Bottleneck 4 — enrichment output quality is inconsistent
-
-Text-for-embedding is created in multiple components (matcher + converter).
+* fail fast in dev (raise)
+* in prod, quarantine config errors with a clear message and skip that university
 
 ---
 
-## 6) Phase 8 proposal (concrete deliverables)
+## 4) Concurrency & resilience: run 50 scrapers without Celery/Redis
 
-### Phase 8.1 — Document Intelligence Layer
+You can keep this simple. You don’t need Celery unless you want distributed workers, durable queues, scheduling, retries across machines, etc.
 
-**Goal:** treat PDFs/HTML as typed evidence, not “maybe this is the right file”.
+### Option A (lowest refactor): process-level parallelism (recommended first step)
 
-Deliver:
+Keep your current synchronous `BaseScraper` flow. 
+Create a new “orchestrator” that runs multiple universities in parallel using `ProcessPoolExecutor` (or even `ThreadPoolExecutor` if mostly network I/O).
 
-* `DocumentCandidate` model
-* `DocumentClassifier` (doc type + year + confidence)
-* `ExtractionReport` with quality metrics
-* `TruthSelector` that chooses best candidate per doc type and flags conflicts
+* Each worker:
 
-### Phase 8.2 — Fix Fusion Engine correctness + add conflict modeling
+  * creates adapter via factory
+  * runs `BaseScraper(run_id=..., adapter=...)`
+  * then runs enrichment (once you refactor it to be adapter-driven)
 
-* Fix `_fuse_data()` bug (stop-the-line) 
-* Store per-field provenance (e.g., `spots_budget_sources = [...]`)
-* Add conflict flags when multiple strong sources disagree
+**Why process-based is attractive here:**
 
-### Phase 8.3 — Parser hardening
+* isolates memory leaks from browser automation
+* isolates “weird PDF parsing crashes”
+* you can hard-cap max parallel universities (e.g., 4–8) without a distributed system
 
-* Normalize once, line-based parsing fallback, synonym anchors 
-* Improve table extraction using explicit column detection (pdfplumber bbox-based) for standard layouts
+### Option B (best throughput, moderate refactor): AsyncIO for HTTP + bounded pools
 
-### Phase 8.4 — Replace blacklist with scoring gates
+Your `config.yaml` already hints you want this (domain groups, timeouts, circuit breaker). 
 
-* Candidate scoring with DOM context
-* Quarantine low-confidence candidates instead of trying to “fix” them with new blacklists 
+A simple AsyncIO design (no Celery):
 
-### Phase 8.5 — RAG schema redesign for student “career questions”
+* Global `AsyncClient` (httpx/aiohttp)
+* Per-domain-group `asyncio.Semaphore(max_concurrent)`
+* Token-bucket rate limiter per domain (or simple “sleep between requests per domain”)
+* Circuit breaker per domain group (you already modeled thresholds in config) 
+* PDF parsing pushed into a `ProcessPoolExecutor` (pdfplumber can be CPU-heavy)
 
-* Split facts vs inferred
-* Controlled ontology mapping
-* Single point of truth for `text_for_embedding` generation 
+This gives you “50 universities concurrently” in one process *without* creating 50 browsers and without external infra.
 
-### Phase 8.6 — Cross-university plugin architecture
+### Browser instances (shared resources) without complexity
 
-Create:
+Make browser usage explicit:
 
-* `UniversityAdapter` interface:
+* Only use browser mode for universities/URLs that need it (`FetchMode="browser"`).
+* Use a **single browser per process** and a pool of contexts/pages:
 
-  * `discover_faculty_pages()`
-  * `extract_program_candidates(html)`
-  * `discover_documents(html)` (pdf queue)
-  * `classify_documents(candidates)`
-  * `extract_spots(doc)`
-  * `extract_last_grade(doc)` (next section)
-* Per-university configs (selectors, language variants, known doc keywords)
-* Shared core: normalization, document scoring, fusion, RAG conversion
+  * `max_pages = N` (e.g., 2–4)
+  * protect with semaphore
+* Close contexts after each page to avoid memory blowup.
 
-This is how you avoid copying UCVScraper N times.
+Right now you instantiate `BrowserManager` but don’t use it. As soon as you add `FetchMode`, you can start using it only when required.
 
----
+### Rate limiting without a queue
 
-## 7) Automating “Last Admission Grade” extraction (missing field)
+You can implement a “polite scheduler” in ~100 lines:
 
-You already have `last_admission_grade` in the schema. 
-You need a **separate document type pipeline** for it.
+* key = domain group (from YAML)
+* each group has:
 
-### The safe approach (Zero Garbage + privacy-safe)
+  * semaphore concurrency
+  * minimum delay between requests (token bucket)
+  * error counter + reset timer (circuit breaker)
+* `BaseScraper` should request pages through this scheduler instead of calling `http_client.get()` directly
 
-**Do NOT store candidate lists with names/codes.**
-Instead:
-
-* Parse results PDFs,
-* Compute the **minimum admitted grade per program**,
-* Discard all rows and keep only aggregate stats + provenance.
-
-### How to implement
-
-1. Extend PDF discovery to also identify:
-
-* `RESULTS` PDFs: `"rezultate"`, `"admiși"`, `"lista finală"`, `"clasament"`, `"confirmări"`, etc.
-
-Note: right now `NEGATIVE_KW` includes `"rezultate"` for the spots PDF selector  — keep that for spots selection, but add a separate selector for grade docs.
-
-2. Add `PDFParser.extract_last_grade(pdf_path)`:
-
-* Table strategy first (results often tables with `Media`)
-* Text fallback:
-
-  * Search for explicit anchors: `ultima medie`, `media ultimului admis`, `ultima medie la buget/taxă`
-  * If not present, parse the “Media” column values and take min for admitted rows.
-
-3. Add strict guards:
-
-* Grades must be within plausible range (e.g., 1–10 or 0–10 depending on scale).
-* Require at least N samples before trusting computed min.
-* If doc appears scanned or OCR-noisy → skip unless you have a clean backup.
-
-4. Store:
-
-* `last_admission_grade`
-* `last_admission_grade_type`: `explicit` vs `computed_min`
-* `last_admission_grade_year`
-* `provenance`: pdf_url + hash + extractor version
+Your YAML already has the right shape for this. 
 
 ---
 
-## 8) A few more “code smell” callouts (worth fixing early)
+## Suggested Scalability Roadmap (practical, staged)
 
-### `scraper.py`
+### Phase 0: Fix scale blockers (do before adding 10+ universities)
 
-* Duplicate `PDF_ONLY_FACULTIES` blocks + dead “pass” branches after early-return. 
-* Massive blacklist regex list inside the hot loop → slow and unmaintainable. 
-* `level = "Licenta" if "licenta" in url else "Master"` is not reliable. 
+1. **Decouple enrichment from UCV**
 
-### `pdf_parser.py`
+* `DataFusionEngine` must not import `execution.scrapers.ucv.pdf_parser.PDFParser`. It should ask the adapter for a parser.
 
-* Table extraction falls back to hard-coded column indices (`row[2]`, `row[5]`) which is fragile across layouts. 
-* Text patterns don’t cover many real Romanian variants (“bugetate”, “cu plată”, etc.). 
+2. **Remove hard-coded year `2026`**
 
-### `matcher.py`
+* `_identify_spots_pdf` should use `self.admission_year` or adapter config. 
 
-* Enrichment mode broken (critical) 
-* Unused imports (`process`, `fuzz_utils`, `unicodedata`) 
-* Mixed responsibilities: it both fuses data *and* writes embedding text (shouldn’t). 
+3. **Fix the undefined `pdf_rows` reference**
 
-### `rag_converter.py`
+* There’s a leftover `valid_rows = [r for r in pdf_rows ...]` after `pdf_rows_list` is built, which will crash.
 
-* Embedding narrative is very thin and partly keyword-substring based (“mec” → mechanical). 
-* Hard-coded `admission_year = 2026`. 
+4. **Make run IDs collision-safe**
+
+* `run_pipeline_v4.py` uses timestamp seconds; concurrent starts can collide. Use uuid or include slug. 
+
+### Phase 1: Adapter factory + consistent packaging
+
+* Implement registry/factory
+* Update runner to take `--uni` and instantiate adapter dynamically
+* Keep `execution/scrapers/{slug}/adapter.py` and `config.yaml` convention
+
+This unlocks “50 adapters” without touching the runner each time.
+
+### Phase 2: Make adapters “capability-based” (pagination, fetch mode, parsers)
+
+Extend `UniversityAdapter` with optional capabilities (defaults provided):
+
+* `get_fetch_mode(url)` or per-URL metadata
+* `discover_additional_pages(...)` (pagination)
+* `parse_spots(...)` or `get_spots_parser()`
+
+Keep the required interface small, and let advanced universities implement the extra hooks. 
+
+### Phase 3: Config normalization (hybrid config + code)
+
+* Define `UniversityConfig` Pydantic model
+* Move selector lists, keyword lists, and faculty flags into YAML
+* Keep fallback/heuristics in Python
+
+This reduces adapter code volume while preserving flexibility.
+
+### Phase 4: Concurrency (simple → powerful)
+
+* Start with `ProcessPoolExecutor` to run multiple universities concurrently (fastest to implement).
+* Then (if needed) refactor the fetch layer to AsyncIO using your existing config model for domain groups, circuit breakers, and PDF concurrency.
 
 ---
 
-## 9) If you want me to go even deeper
+## Direct answers to your 4 specific questions
 
-I can audit your *end-to-end* pipeline correctness and scaling risks much more precisely if you share:
+### 1) Factory pattern: folder-per-university or plugin system?
 
-* `execution/scrapers/ucv/config.yaml` (to see how you intend to scale configs)
-* your PDF download processor (where `local_path` is injected into `pdf_queue.json`)
-* any “runner”/orchestration script (`run_pipeline.py` etc.)
+**Folder-per-university + registry/factory** is the sweet spot:
 
-But even without those, the **top priority fix** is: **repair `_fuse_data()`**, then implement doc-type aware PDF selection + extraction-quality scoring. That will immediately improve both correctness and scalability.
+* keeps codebase navigable
+* keeps config close to code
+* avoids external plugin complexity until you need it
+
+Implement a registry decorator + `create_adapter(slug)`; update `run_pipeline_v4.py` style runner to select by slug.
+
+### 2) Configuration vs code: selectors into YAML?
+
+**Yes, but hybrid.**
+
+* Move “selectors + keyword lists + faculty flags + rate limits” into YAML.
+* Keep “multi-strategy parsing + heuristics + normalization” in Python.
+
+Also add Pydantic validation for YAML so broken configs don’t silently become “0 faculties scraped”.
+
+### 3) Resilience without Celery/Redis?
+
+Use **bounded concurrency + domain-group rate limiting + circuit breaker**:
+
+* simplest: run universities in parallel processes (4–8 workers), keep BaseScraper mostly unchanged
+* better: AsyncIO with semaphores per domain group (you already modeled this in config)
+
+### 4) Adapter interface review: missing Pagination / Authentication?
+
+**Pagination is the big missing one.** Without it, you must hardcode all pages in YAML forever.
+Authentication is “maybe”; most universities won’t require it, so make it optional:
+
+* optional `get_http_headers()/get_cookies()`
+* optional `login()` or “session bootstrap” hook
+
+Also missing: adapter-provided spots PDF parsing (right now enrichment is UCV-coupled).
+
+---
+
+If you want one guiding principle for the Scalability Phase:
+
+**Make the adapter the single “university boundary” for HTML discovery + PDF discovery + document parsing, and make the runner/orchestrator responsible for fetching, rate limiting, concurrency, and run context.**
+
+That’s how you get to 50+ universities without turning the core pipeline into a pile of special cases.
