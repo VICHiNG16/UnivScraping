@@ -1,6 +1,6 @@
 
-import re
 import math
+import re
 from typing import Dict, Any, List
 
 class SemanticValidator:
@@ -11,21 +11,41 @@ class SemanticValidator:
     
     def __init__(self):
         self.NEGATIVE_KEYWORDS = [
-            "secretariat", "contact", "acasa", "home", "meniu", "search", 
-            "regulament", "concurs", "biblioteca", "campus", "cazare", 
-            "burse", "orar", "proiecte", "parteneri", "despre", "istoric", 
-            "conducere", "departamente", "login", "harta", "gdpr", "cookies",
-            "anunturi", "evenimente", "noutati", "presă", "media", "galerie"
+            "secretariat", "contact", "acasa", "home", "meniu", "search",
+            "regulament", "concurs", "bibliotec", "campus", "cazare",
+            "burse", "orar", "proiect", "partener", "despre", "istoric",
+            "conducer", "departament", "login", "harta", "gdpr", "cookies",
+            "anunt", "eveniment", "noutat", "presa", "media", "galerie",
+            "admitere", "inscrier", "secretari"
         ]
         
         self.POSITIVE_KEYWORDS = [
-            "inginer", "stiint", "limb", "literatur", "studi", 
+            "inginer", "stiint", "limb", "literatur", "studi",
             "master", "licent", "manag", "drept", "informat", "tehnolog",
-            "matemat", "chimi", "fizic", "biolog", "geografi", 
             "matemat", "chimi", "fizic", "biolog", "geografi",
-            "istori", "teolog", "art", "muzic", "teatr", "pedagog",
-            "sport", "educati", "administra", "econom", "finant", "didac"
+            "istori", "teolog", "arte", "muzic", "teatr", "pedagog",
+            "sport", "educati", "administra", "econom", "finant", "didac",
+            "psiholog", "comunic", "sociolog", "arhitect", "construct",
+            "electr", "mecanic", "agronom", "horticult", "silvicult",
+            "marketing", "contab", "statistic", "kinetoterap", "farmac"
         ]
+
+        self.PROGRAM_SUFFIXES = [
+            "ologie", "istica", "logie", "grafie", "metrie", "nomic", "genie",
+            "turism", "silvic", "sanitar", "juridic"
+        ]
+
+    def _normalize_text(self, text: str) -> str:
+        text = text.lower().strip()
+        text = text.replace("ş", "s").replace("ș", "s").replace("ţ", "t").replace("ț", "t")
+        text = text.replace("ă", "a").replace("â", "a").replace("î", "i")
+        return re.sub(r"[^\w\s]", " ", text)
+
+    def _tokenize(self, text: str) -> List[str]:
+        return [t for t in text.split() if t]
+
+    def _has_keyword(self, tokens: List[str], keywords: List[str]) -> bool:
+        return any(any(token.startswith(kw) for token in tokens) for kw in keywords)
         
     def validate_program_name(self, name: str) -> Dict[str, Any]:
         """
@@ -39,7 +59,8 @@ class SemanticValidator:
         if not name:
             return {"status": "FAIL", "score": 0, "reason": "Empty string"}
             
-        name_lower = name.lower().strip()
+        name_norm = self._normalize_text(name)
+        tokens = self._tokenize(name_norm)
         
         # 1. Entropy / Stucture Checks
         if len(name) < 4:
@@ -49,26 +70,32 @@ class SemanticValidator:
              return {"status": "FAIL", "score": 0, "reason": "Too long"}
              
         # Digit Ratio (Programs shouldn't be mostly numbers)
-        digit_count = sum(c.isdigit() for c in name)
+        digit_count = sum(c.isdigit() for c in name_norm)
         if digit_count / len(name) > 0.4:
              return {"status": "FAIL", "score": 10, "reason": "High digit ratio (looks like phone/CNP)"}
 
+        # Entropy / diversity check for noisy strings like "aaaaa" or repeated symbols
+        alpha_chars = [c for c in name_norm if c.isalpha()]
+        unique_alpha = len(set(alpha_chars))
+        if alpha_chars and len(alpha_chars) >= 6 and unique_alpha <= 2:
+            return {"status": "FAIL", "score": 5, "reason": "Low character diversity"}
+
         # 2. Negative Keywords (Iron Dome)
         for kw in self.NEGATIVE_KEYWORDS:
-            if kw in name_lower:
-                # "Secretariat" is fatal. "Contact" is fatal.
-                # Check for context: "Secretariatul Facultatii" vs "Secretariat si Administratie"
+            if any(token.startswith(kw) for token in tokens):
                 return {"status": "FAIL", "score": 0, "reason": f"Negative keyword: {kw}"}
                 
         # 3. Positive Keywords (Boost)
         pos_score = 0
         for kw in self.POSITIVE_KEYWORDS:
-            if kw in name_lower:
+            if any(token.startswith(kw) for token in tokens):
                 pos_score += 20
-                # If name IS the keyword (nearly), extra boost
-                # e.g. "Informatica" vs "Facultatea de Informatica"
-                if len(name_lower) <= len(kw) + 3:
-                     pos_score += 15
+                if len(name_norm) <= len(kw) + 3:
+                    pos_score += 15
+
+        # Root/Suffix heuristic (Romanian program morphology)
+        if any(any(token.endswith(suffix) for suffix in self.PROGRAM_SUFFIXES) for token in tokens):
+            pos_score += 10
         
         # 4. Heuristic Scoring
         # Base score starts low, needs positive signal

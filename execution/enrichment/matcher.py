@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -340,15 +341,6 @@ class DataFusionEngine:
             logger.warning(f"[{slug}] All PDF candidates failed to yield Data.")
             return
 
-        # V7: Post-Extraction Validation
-        # If all extracted rows are garbage (e.g. "Signature"), discard match and warn.
-        valid_rows = [r for r in pdf_rows if len(r['program_name']) > 5 and "copie" not in r['program_name'].lower()]
-        
-        if len(valid_rows) < len(pdf_rows) * 0.5:
-             logger.warning(f"[{slug}] PDF yielded mostly garbage rows (e.g. '{pdf_rows[0]['program_name']}'). Discarding.")
-             # Ideally we would loop back and try next candidate, but for now just filter?
-             pass # Logic flaw in previous step, fixed below.
-
         # 4. Phase 8.6: Load and Fuse Grades
         grades_map = self._load_grades(slug)
         
@@ -401,20 +393,27 @@ class DataFusionEngine:
         Fuzzy matching logic using V4 Matcher.
         V8: Now accepting explicit faculty_uid (Hash) and slug.
         """
-        # V6: PDF-First Synthesis
-        if not programs and pdf_rows:
-            logger.info(f"[{slug}] PDF-Only Mode: Synthesizing {len(pdf_rows)} programs from PDF.")
-            for row in pdf_rows:
-                # V9: Zero Garbage Validation
-                val_res = self.validator.validate_program_name(row['program_name'])
-                if val_res["status"] == "FAIL":
-                    logger.warning(f"[{slug}] Dropping Garbage Candidate: '{row['program_name']}' (Reason: {val_res['reason']})")
-                    continue
-                if val_res["status"] == "QUARANTINE":
-                     logger.warning(f"[{slug}] Quarantining Candidate: '{row['program_name']}' (Score: {val_res['score']})")
-                     self._save_quarantine(slug, row, val_res)
-                     continue
+        # V9: Zero Garbage Validation (apply to all PDF rows)
+        filtered_rows = []
+        for row in pdf_rows:
+            val_res = self.validator.validate_program_name(row.get("program_name", ""))
+            if val_res["status"] == "FAIL":
+                logger.warning(f"[{slug}] Dropping Garbage Candidate: '{row.get('program_name')}' (Reason: {val_res['reason']})")
+                continue
+            if val_res["status"] == "QUARANTINE":
+                logger.warning(f"[{slug}] Quarantining Candidate: '{row.get('program_name')}' (Score: {val_res['score']})")
+                self._save_quarantine(slug, row, val_res)
+                continue
+            filtered_rows.append(row)
 
+        if not filtered_rows:
+            logger.warning(f"[{slug}] All PDF rows failed validation for source '{source_name}'.")
+            return
+
+        # V6: PDF-First Synthesis
+        if not programs and filtered_rows:
+            logger.info(f"[{slug}] PDF-Only Mode: Synthesizing {len(filtered_rows)} programs from PDF.")
+            for row in filtered_rows:
                 # Create Minimal Program Entity
                 match_id = hashlib.sha256(f"{slug}|{row['program_name']}".encode()).hexdigest()
                 career_paths = self._infer_career_paths(row['program_name'])
@@ -449,7 +448,7 @@ class DataFusionEngine:
                 self._save_program(slug, prog)
             return
 
-        matcher = RomanianProgramMatcher(programs, pdf_rows)
+        matcher = RomanianProgramMatcher(programs, filtered_rows)
         results = matcher.match_all()
         
         for res in results:
