@@ -23,43 +23,23 @@ Each university has unique layouts, inconsistent PDF formats, and different "spo
 3.  **Resilience**: With 50 concurrent scrapers (or sequential), how do we handle shared resources (browser instances) and rate limiting without a complex queueing infrastructure (like Celery/Redis) if we want to keep it simple?
 4.  **Adapter Interface Review**: Please review the provided `UniversityAdapter` interface. Is it abstract enough? Are we missing methods for "Pagination" or "Authentication" that might pop up later?
 
-**Context Code**:
+**Attached Context Files**:
+Please analyze the following 10 uploaded files which represent the core of our system:
 
-```python
-# execution/scrapers/adapter_interface.py
-
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any
-
-class UniversityAdapter(ABC):
-    """
-    Standard interface for all University scrapers.
-    Ensures that the Main Pipeline can treat UCV, UPB, UBB identicaly.
-    """
-
-    @abstractmethod
-    def get_faculties(self) -> List[Dict[str, str]]:
-        """
-        Returns a list of faculties to scrape.
-        [{ "name": "Automatica", "slug": "ac", "url": "..." }]
-        """
-        pass
-
-    @abstractmethod
-    def scrape_faculty_structure(self, faculty_slug: str, url: str) -> List[Dict[str, Any]]:
-        """
-        Scrapes the HTML structure to find programs (Bachelor/Master)
-        and potential PDF links.
-        """
-        pass
-
-    @abstractmethod
-    def get_pdf_links(self, faculty_slug: str, soup: Any) -> List[str]:
-        """
-        Extracts relevant PDF links (spots, admission info) from the page.
-        """
-        pass
-```
+1.  **Contract**: `execution/scrapers/adapter_interface.py` (The Abstract Base Class)
+2.  **Implementation**: `execution/scrapers/ucv/adapter.py` (How UCV implements the contract)
+3.  **Engine**: `execution/base/scraper_base.py` (The logic running the scraping loop)
+4.  **Logic**: `execution/enrichment/matcher.py` (Fuzzy matching & conflict arbitration)
+5.  **PDFs**: `execution/scrapers/ucv/pdf_parser.py` (Page-by-page extraction logic)
+6.  **Data**: `execution/models/program.py` (Pydantic models)
+7.  **Quality**: `execution/processors/validator.py` ("Iron Dome" Semantic Validator)
+8.  **Config**: `execution/scrapers/ucv/config.yaml` (Faculty definitions)
+9.  **Orchestration**: `run_pipeline_v4.py` (How we currently run a job)
+10. **History**: `task.md` (What we have just finished)
 
 **Output Desired**:
-A strategic roadmap for the "Scalability Phase" and a critique of the Interface.
+Based *specifically* on these files, provide a strategic roadmap for the "Scalability Phase":
+1.  **Architecture**: Critique the `UniversityAdapter`. Is it robust enough for 50 universities?
+2.  **Factory Pattern**: How to manage 50+ adapter class files dynamically?
+3.  **Config vs Code**: Should we move more logic (selectors) to YAML?
+4.  **Concurrency**: Recommendation for running these 50 scrapers (AsyncIO vs Celery)?
