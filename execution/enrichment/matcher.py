@@ -401,19 +401,27 @@ class DataFusionEngine:
         Fuzzy matching logic using V4 Matcher.
         V8: Now accepting explicit faculty_uid (Hash) and slug.
         """
+        # V9: Zero Garbage Validation (apply to all PDF rows)
+        filtered_rows = []
+        for row in pdf_rows:
+            val_res = self.validator.validate_program_name(row.get("program_name", ""))
+            if val_res["status"] == "FAIL":
+                logger.warning(f"[{slug}] Dropping Garbage Candidate: '{row.get('program_name')}' (Reason: {val_res['reason']})")
+                continue
+            if val_res["status"] == "QUARANTINE":
+                logger.warning(f"[{slug}] Quarantining Candidate: '{row.get('program_name')}' (Score: {val_res['score']})")
+                self._save_quarantine(slug, row, val_res)
+                continue
+            filtered_rows.append(row)
+
+        if not filtered_rows:
+            logger.warning(f"[{slug}] All PDF rows failed validation for source '{source_name}'.")
+            return
+
         # V6: PDF-First Synthesis
-        if not programs and pdf_rows:
-            logger.info(f"[{slug}] PDF-Only Mode: Synthesizing {len(pdf_rows)} programs from PDF.")
-            for row in pdf_rows:
-                # V9: Zero Garbage Validation
-                val_res = self.validator.validate_program_name(row['program_name'])
-                if val_res["status"] == "FAIL":
-                    logger.warning(f"[{slug}] Dropping Garbage Candidate: '{row['program_name']}' (Reason: {val_res['reason']})")
-                    continue
-                if val_res["status"] == "QUARANTINE":
-                     logger.warning(f"[{slug}] Quarantining Candidate: '{row['program_name']}' (Score: {val_res['score']})")
-                     self._save_quarantine(slug, row, val_res)
-                     continue
+        if not programs and filtered_rows:
+            logger.info(f"[{slug}] PDF-Only Mode: Synthesizing {len(filtered_rows)} programs from PDF.")
+            for row in filtered_rows:
 
                 # Create Minimal Program Entity
                 match_id = hashlib.sha256(f"{slug}|{row['program_name']}".encode()).hexdigest()
@@ -449,7 +457,7 @@ class DataFusionEngine:
                 self._save_program(slug, prog)
             return
 
-        matcher = RomanianProgramMatcher(programs, pdf_rows)
+        matcher = RomanianProgramMatcher(programs, filtered_rows)
         results = matcher.match_all()
         
         for res in results:
@@ -482,6 +490,7 @@ class DataFusionEngine:
                     "value": {"budget": match.get("spots_budget", 0), "tax": match.get("spots_tax", 0)},
                     "score": likelihood_score, # Content score of the PDF
                     "match_score": score, # Fuzzy match score
+                    "page": match.get("page"), # Provenance: Page Number
                     "timestamp": datetime.datetime.now().isoformat()
                 }
                 prog["evidence"]["spots"].append(evidence_entry)

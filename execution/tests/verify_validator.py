@@ -1,56 +1,51 @@
 
+import unittest
 import logging
-import sys
 from execution.processors.validator import SemanticValidator
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("verify_validator")
 
-def verify_validator():
-    validator = SemanticValidator()
-    
-    test_cases = [
-        # PASS
-        ("Ingineria Sistemelor", "PASS"),
-        ("Tehnologia Informației", "PASS"),
-        ("Informatică", "PASS"),
-        ("Limba și Literatura Română", "PASS"),
-        ("Drept", "PASS"),
-        
-        # FAIL
-        ("Meniu", "FAIL"),
-        ("Secretariat", "FAIL"),
-        ("Contact", "FAIL"),
-        ("Acasa", "FAIL"),
-        ("12345", "FAIL"),
-        ("ABC", "FAIL"), # Too short
-        
-        # QUARANTINE / FAIL (Dependig on strictness)
-        ("Program Nou", "FAIL"), # Generic, low score
-        ("Admitere 2026", "FAIL"), # No positive keywords, short
-        ("Studii de caz", "PASS") # "Studii" is positive
-    ]
-    
-    passed_all = True
-    for name, expected in test_cases:
-        res = validator.validate_program_name(name)
-        status = res["status"]
-        if status != expected:
-            # Allow QUARANTINE if expected FAIL for borderline
-            if expected == "FAIL" and status == "QUARANTINE":
-                logger.info(f"⚠️  Borderline: '{name}' -> QUARANTINE (Expected FAIL). Acceptable.")
-            elif expected == "PASS" and status == "QUARANTINE":
-                 logger.warning(f"⚠️  Weak Pass: '{name}' -> QUARANTINE (Expected PASS). Score: {res['score']}, Reason: {res['reason']}")
-            else:
-                logger.error(f"❌ Mismatch: '{name}' -> {status} (Expected {expected}). Score: {res['score']}, Reason: {res['reason']}")
-                passed_all = False
-        else:
-            logger.info(f"✅ Correct: '{name}' -> {status}")
-            
-    return passed_all
+class TestSemanticValidator(unittest.TestCase):
+    def setUp(self):
+        logging.basicConfig(level=logging.INFO)
+        self.validator = SemanticValidator()
 
-if __name__ == "__main__":
-    if verify_validator():
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    def test_valid_programs(self):
+        valid_examples = [
+            "Ingineria Sistemelor",
+            "Calculatoare si Tehnologia Informatiei",
+            "Drept",             # Short but keyword
+            "Management",
+            "Psihologie",        # Suffixed (ologie)
+            "Kinetoterapie",     # Keyword
+            "Limba si Literatura Romana"
+        ]
+        for name in valid_examples:
+            res = self.validator.validate_program_name(name)
+            self.assertEqual(res["status"], "PASS", f"Should PASS: {name} (Score: {res['score']}, Reason: {res['reason']})")
+            logger.info(f"✅ PASS: {name} ({res['score']})")
+
+    def test_garbage(self):
+        garbage_examples = [
+            "Secretariat",
+            "Meniu Principal",
+            "Acasa",
+            "Contact",
+            "Programul de la ora 10", 
+            "aaaaa",             # Low entropy
+            "123456",            # Digit ratio
+            "Pagina 1 din 10"    # Generic
+        ]
+        for name in garbage_examples:
+            res = self.validator.validate_program_name(name)
+            self.assertNotEqual(res["status"], "PASS", f"Should FAIL: {name} (Score: {res['score']}, Reason: {res['reason']})")
+            logger.info(f"✅ FAIL: {name} ({res['reason']})")
+
+    def test_normalization(self):
+        # "Științe" should match "stiint"
+        res = self.validator.validate_program_name("Științe Politice")
+        self.assertEqual(res["status"], "PASS", "Should handle diacritics")
+        logger.info(f"✅ PASS: Științe ({res['score']})")
+
+if __name__ == '__main__':
+    unittest.main()

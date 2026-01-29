@@ -40,14 +40,14 @@ def verify_conflict_modeling():
     }
     programs = [prog]
     
-    # 3. Create Conflicting Candidates
+    # Create Conflicting Candidates
     # Candidate A: Low Score, 100 spots
-    rows_A = [{"program_name": "Informatica", "spots_budget": 100, "spots_tax": 50, "level": "Licenta"}]
+    rows_A = [{"program_name": "Informatica", "spots_budget": 100, "spots_tax": 50, "level": "Licenta", "page": 2}]
     url_A = "http://test.com/weak.pdf"
     score_A = 50 
     
     # Candidate B: High Score, 150 spots
-    rows_B = [{"program_name": "Informatica", "spots_budget": 150, "spots_tax": 75, "level": "Licenta"}]
+    rows_B = [{"program_name": "Informatica", "spots_budget": 150, "spots_tax": 75, "level": "Licenta", "page": 5}]
     url_B = "http://test.com/strong.pdf"
     score_B = 90
     
@@ -66,8 +66,14 @@ def verify_conflict_modeling():
     if len(evidence_list) != 2:
         logger.error(f"❌ FAILED: Expected 2 evidence entries, found {len(evidence_list)}")
         return False
+    
+    # Check for Provenance (Page Number)
+    for ev in evidence_list:
+        if "page" not in ev:
+            logger.error(f"❌ FAILED: Evidence missing 'page' field: {ev}")
+            return False
         
-    logger.info("✅ Evidence collection working (2/2 entries found).")
+    logger.info("✅ Evidence collection working (2/2 entries found with Page Provenance).")
     
     # Arbitration Check
     if p["spots_budget"] != 150:

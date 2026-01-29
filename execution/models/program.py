@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 from pydantic import Field
 from execution.models.base import BaseEntity
 
@@ -33,7 +33,10 @@ class Program(BaseEntity):
     raw_admission_text: Optional[str] = Field(None, description="Raw string extracted for admission info (e.g. '30 locuri buget').")
 
     # V8.7 Conflict Modeling
-    evidence: Optional[dict] = Field(default_factory=dict, description="Stores conflicting data points from multiple sources. Keys: 'spots', 'grades'.")
+    evidence: Optional[dict[str, list[dict[str, Any]]]] = Field(
+        default_factory=dict,
+        description="Stores evidence arrays per data source (e.g. 'spots', 'grades'). Each entry can include source, scores, and timestamps."
+    )
 
     def __init__(self, **data):
         # Force entity_type to 'program'
