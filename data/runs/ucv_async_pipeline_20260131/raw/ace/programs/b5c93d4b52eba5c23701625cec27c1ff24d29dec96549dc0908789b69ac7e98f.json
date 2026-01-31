@@ -1,0 +1,60 @@
+{
+  "uid": "b5c93d4b52eba5c23701625cec27c1ff24d29dec96549dc0908789b69ac7e98f",
+  "run_id": "ucv_async_pipeline_20260131",
+  "scraped_at": "2026-01-31T09:16:03.970430Z",
+  "source_url": "https://ace.ucv.ro/admitere/master",
+  "content_hash": "1a1cc3c482287ce872401ecefb9f3c30e65829c06c7f977b5f7932a581663026",
+  "entity_type": "program",
+  "name": "Master în Inginerie software",
+  "faculty_uid": "ace",
+  "faculty_slug": "ace",
+  "level": "Master",
+  "duration_years": "2 ani",
+  "program_id": null,
+  "language": "Romanian",
+  "keywords": [],
+  "text_for_embedding": "Programul: Master în Inginerie software (Master)\nFacultate: ACE\nLocuri Buget: None (Sursa: PDF aici)\nLocuri Taxa: None (Sursa: PDF aici)\n[INFERENCE]\nCariera: Specific domeniului",
+  "admission_year": null,
+  "spots_budget": null,
+  "spots_tax": null,
+  "spots_raw": "Master în Inginerie software [Domain: Calculatoare şi Tehnologia Informației, un număr de 2 locuri la buget și 31 de locuri cu taxă: Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă; Master în Securitate cibernetică și tehnologii cuantice , 10 locuri cu taxă; Master în Inginerie software , 1 loc la buget și 10 locuri cu taxă.]",
+  "source_type": "html_text_parsed",
+  "accuracy_confidence": 0.8,
+  "last_admission_grade": null,
+  "raw_admission_text": null,
+  "evidence": {
+    "spots": [
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.569231"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/Modalitate%20Admitere%20MASTER%20Septembrie%202025.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.578061"
+      }
+    ]
+  },
+  "metadata": {
+    "best_source_score": 18.0,
+    "pdf_match_score": 0.8,
+    "pdf_match_name": "Inginerie software",
+    "pdf_source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+    "match_status": "ambiguous"
+  }
+}

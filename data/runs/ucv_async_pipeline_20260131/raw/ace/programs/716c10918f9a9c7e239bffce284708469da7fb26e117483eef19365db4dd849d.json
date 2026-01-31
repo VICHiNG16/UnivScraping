@@ -1,0 +1,72 @@
+{
+  "uid": "716c10918f9a9c7e239bffce284708469da7fb26e117483eef19365db4dd849d",
+  "run_id": "ucv_async_pipeline_20260131",
+  "scraped_at": "2026-01-31T09:16:03.970866Z",
+  "source_url": "https://ace.ucv.ro/admitere/master",
+  "content_hash": "cc38420fdb48164c5348f75fa0f968557bb5335e728e8a81d4be481b294bf793",
+  "entity_type": "program",
+  "name": "Master în Tehnologii informatice în ingineria sistemelor",
+  "faculty_uid": "ace",
+  "faculty_slug": "ace",
+  "level": "Master",
+  "duration_years": "2 ani",
+  "program_id": null,
+  "language": "Romanian",
+  "keywords": [],
+  "text_for_embedding": "Programul: Master în Tehnologii informatice în ingineria sistemelor (Master)\nFacultate: ACE\nLocuri Buget: 12 (Sursa: PDF aici)\nLocuri Taxa: None (Sursa: PDF aici)\n[INFERENCE]\nCariera: Specific domeniului",
+  "admission_year": null,
+  "spots_budget": 12,
+  "spots_tax": null,
+  "spots_raw": "Master în Tehnologii informatice în ingineria sistemelor [Domain: Ingineria Sistemelor, un număr de 13 locuri la buget și 8 locuri cu taxă: Master în Sisteme automate încorporate , 1 loc la buget și 3 locuri cu taxă; Master în Tehnologii informatice în ingineria sistemelor , 12 locuri la buget și 5 locuri cu taxă;]",
+  "source_type": "html_text_parsed",
+  "accuracy_confidence": 0.8,
+  "last_admission_grade": null,
+  "raw_admission_text": null,
+  "evidence": {
+    "spots": [
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.567964"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/ACE_OFERTA-EDUCATIONALA-MASTER-SEPTEMBRIE-2025.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": 12,
+          "tax": null
+        },
+        "score": 22.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.574446"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/Modalitate%20Admitere%20MASTER%20Septembrie%202025.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.576963"
+      }
+    ]
+  },
+  "metadata": {
+    "best_source_score": 30.0,
+    "pdf_match_score": 0.8,
+    "pdf_match_name": "INGINERIA SISTEMELOR",
+    "pdf_source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/ACE_OFERTA-EDUCATIONALA-MASTER-SEPTEMBRIE-2025.pdf",
+    "match_status": "match"
+  }
+}

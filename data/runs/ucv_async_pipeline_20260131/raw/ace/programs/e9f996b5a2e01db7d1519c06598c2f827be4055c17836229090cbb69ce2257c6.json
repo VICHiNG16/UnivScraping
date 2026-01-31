@@ -1,0 +1,60 @@
+{
+  "uid": "e9f996b5a2e01db7d1519c06598c2f827be4055c17836229090cbb69ce2257c6",
+  "run_id": "ucv_async_pipeline_20260131",
+  "scraped_at": "2026-01-31T09:16:03.970348Z",
+  "source_url": "https://ace.ucv.ro/admitere/master",
+  "content_hash": "a300a72fe2e3b2e1199109889aa17c31400575abbb5857acbfdda00e8c074d4e",
+  "entity_type": "program",
+  "name": "Master în Securitate cibernetică și tehnologii cuantice",
+  "faculty_uid": "ace",
+  "faculty_slug": "ace",
+  "level": "Master",
+  "duration_years": "2 ani",
+  "program_id": null,
+  "language": "Romanian",
+  "keywords": [],
+  "text_for_embedding": "Programul: Master în Securitate cibernetică și tehnologii cuantice (Master)\nFacultate: ACE\nLocuri Buget: None (Sursa: PDF aici)\nLocuri Taxa: None (Sursa: PDF aici)\n[INFERENCE]\nCariera: Specific domeniului",
+  "admission_year": null,
+  "spots_budget": null,
+  "spots_tax": null,
+  "spots_raw": "Master în Securitate cibernetică și tehnologii cuantice [Domain: Calculatoare şi Tehnologia Informației, un număr de 2 locuri la buget și 31 de locuri cu taxă: Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă; Master în Securitate cibernetică și tehnologii cuantice , 10 locuri cu taxă; Master în Inginerie software , 1 loc la buget și 10 locuri cu taxă.]",
+  "source_type": "html_list_mixed",
+  "accuracy_confidence": 0.5,
+  "last_admission_grade": null,
+  "raw_admission_text": null,
+  "evidence": {
+    "spots": [
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.569734"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/Modalitate%20Admitere%20MASTER%20Septembrie%202025.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "page": null,
+        "timestamp": "2026-01-31T14:57:53.578551"
+      }
+    ]
+  },
+  "metadata": {
+    "best_source_score": 18.0,
+    "pdf_match_score": 0.8,
+    "pdf_match_name": "Securitate cibernetică și tehnologii\ncuantice",
+    "pdf_source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+    "match_status": "match"
+  }
+}
