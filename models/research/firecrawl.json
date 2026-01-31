@@ -1,0 +1,143 @@
+{
+    "0": {
+        "faculty": "AGRONOMIE",
+        "faculty_citation": "https://www.ucv.ro/pdf/admitere/2024/UCv-Cifra-scolarizare-repartizata-Licenta-2024-2025-iunie-2024.pdf",
+        "name": "Agricultura",
+        "level": "Licenta",
+        "spots_budget": 78,
+        "spots_tax": 7
+    },
+    "1": {
+        "faculty": "AGRONOMIE",
+        "name": "Silvicultura",
+        "level": "Licenta",
+        "spots_budget": 28,
+        "spots_tax": 7
+    },
+    "2": {
+        "faculty": "AGRONOMIE",
+        "name": "Masuratori terestre si cadastru",
+        "level": "Licenta",
+        "spots_budget": 33,
+        "spots_tax": 5
+    },
+    "3": {
+        "faculty": "AGRONOMIE",
+        "name": "Controlul si expertiza produselor alimentare",
+        "level": "Licenta",
+        "spots_budget": 33,
+        "spots_tax": 8
+    },
+    "4": {
+        "faculty": "AUTOMATICĂ, CALCULATOARE ȘI ELECTRONICĂ",
+        "name": "Automatica si informatica aplicata",
+        "level": "Licenta",
+        "spots_budget": 75,
+        "spots_tax": 14
+    },
+    "5": {
+        "faculty": "AUTOMATICĂ, CALCULATOARE ȘI ELECTRONICĂ",
+        "name": "Calculatoare",
+        "level": "Licenta",
+        "spots_budget": 70,
+        "spots_tax": 6
+    },
+    "6": {
+        "faculty": "AUTOMATICĂ, CALCULATOARE ȘI ELECTRONICĂ",
+        "name": "Calculatoare (Engleza)",
+        "level": "Licenta",
+        "spots_budget": 70,
+        "spots_tax": 6
+    },
+    "7": {
+        "faculty": "AUTOMATICĂ, CALCULATOARE ȘI ELECTRONICĂ",
+        "name": "Ingineria sistemelor multimedia",
+        "level": "Licenta",
+        "spots_budget": 32,
+        "spots_tax": 9
+    },
+    "8": {
+        "faculty": "AUTOMATICĂ, CALCULATOARE ȘI ELECTRONICĂ",
+        "name": "Mecatronica",
+        "level": "Licenta",
+        "spots_budget": 35,
+        "spots_tax": 10
+    },
+    "9": {
+        "faculty": "AUTOMATICĂ, CALCULATOARE ȘI ELECTRONICĂ",
+        "name": "Robotica",
+        "level": "Licenta",
+        "spots_budget": 0,
+        "spots_tax": 45
+    },
+    "10": {
+        "faculty": "DREPT",
+        "name": "Drept",
+        "level": "Licenta",
+        "spots_budget": 168,
+        "spots_tax": 85
+    },
+    "11": {
+        "faculty": "DREPT",
+        "name": "Administratie publica",
+        "level": "Licenta",
+        "spots_budget": 40,
+        "spots_tax": 20
+    },
+    "12": {
+        "faculty": "INGINERIE ELECTRICĂ",
+        "name": "Inginerie electrica si calculatoare",
+        "level": "Licenta",
+        "spots_budget": 50,
+        "spots_tax": 7
+    },
+    "13": {
+        "faculty": "INGINERIE ELECTRICĂ",
+        "name": "Electromecanica",
+        "level": "Licenta",
+        "spots_budget": 69,
+        "spots_tax": 1
+    },
+    "14": {
+        "faculty": "LITERE",
+        "name": "Limba si literatura romana - Limba si literatura moderna",
+        "level": "Licenta",
+        "spots_budget": 85,
+        "spots_tax": 10
+    },
+    "15": {
+        "faculty": "LITERE",
+        "name": "Comunicare si relatii publice",
+        "level": "Licenta",
+        "spots_budget": 40,
+        "spots_tax": 15
+    },
+    "16": {
+        "faculty": "LITERE",
+        "name": "Pedagogia invatamantului primar si prescolar",
+        "level": "Licenta",
+        "spots_budget": 40,
+        "spots_tax": 12
+    },
+    "17": {
+        "faculty": "MECANICĂ",
+        "name": "Autovehicule rutiere",
+        "level": "Licenta",
+        "spots_budget": 102,
+        "spots_tax": 15
+    },
+    "18": {
+        "faculty": "ȘTIINȚE",
+        "name": "Informatica",
+        "level": "Licenta",
+        "spots_budget": 120,
+        "spots_tax": 24
+    },
+    "19": {
+        "faculty": "ȘTIINȚE",
+        "name": "Matematica informatica",
+        "level": "Licenta",
+        "spots_budget": 30,
+        "spots_tax": 6
+    }
+}

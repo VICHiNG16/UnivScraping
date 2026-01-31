@@ -1,5 +1,6 @@
 import json
 import logging
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
@@ -340,14 +341,8 @@ class DataFusionEngine:
             logger.warning(f"[{slug}] All PDF candidates failed to yield Data.")
             return
 
-        # V7: Post-Extraction Validation
-        # If all extracted rows are garbage (e.g. "Signature"), discard match and warn.
-        valid_rows = [r for r in pdf_rows if len(r['program_name']) > 5 and "copie" not in r['program_name'].lower()]
-        
-        if len(valid_rows) < len(pdf_rows) * 0.5:
-             logger.warning(f"[{slug}] PDF yielded mostly garbage rows (e.g. '{pdf_rows[0]['program_name']}'). Discarding.")
-             # Ideally we would loop back and try next candidate, but for now just filter?
-             pass # Logic flaw in previous step, fixed below.
+        # V7: Post-Extraction Validation (Legacy block removed)
+        # 4. Phase 8.6: Load and Fuse Grades
 
         # 4. Phase 8.6: Load and Fuse Grades
         grades_map = self._load_grades(slug)

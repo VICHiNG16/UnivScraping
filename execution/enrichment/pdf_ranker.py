@@ -116,7 +116,7 @@ class PDFTruthRanker:
                 
                 # Scanned vs Digital
                 if metrics["text_density"] < 50:
-                    score -= 10.0 # Likely scanned image
+                    score -= 2.0 # Likely scanned image (small penalty; OCR fallback may help)
                 else:
                     score += 5.0
                 

@@ -52,7 +52,7 @@ class PoliteHTTPClient:
         delay = random.uniform(self.min_delay, self.max_delay)
         time.sleep(delay)
 
-    def get(self, url: str) -> requests.Response:
+    def get(self, url: str, timeout: int = 60) -> requests.Response:
         """
         Execute a polite GET request.
         """
@@ -61,7 +61,7 @@ class PoliteHTTPClient:
         
         self.logger.debug(f"Fetching: {url}")
         try:
-            response = self.session.get(url, headers=headers, timeout=20)
+            response = self.session.get(url, headers=headers, timeout=timeout)
             response.raise_for_status()
             return response
         except requests.RequestException as e:

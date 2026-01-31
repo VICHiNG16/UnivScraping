@@ -30,49 +30,40 @@ faculties:
   - name: "Facultatea de Litere"
     slug: "litere"
     urls:
-      - "https://litere.ucv.ro/admitere/licenta"
-      - "https://litere.ucv.ro/admitere/master"
+      - "https://litere.ucv.ro/litere/ro"
+      - "https://litere.ucv.ro/litere/ro/admitere"
 
   - name: "Facultatea de Științe"
     slug: "stiinte"
     urls:
-      - "https://msi.ucv.ro/admitere/licenta"
-      - "https://msi.ucv.ro/admitere/master"
+      - "http://stiinte.ucv.ro/admitere.aspx"
 
   - name: "Facultatea de Educație Fizică și Sport"
     slug: "fefs"
     urls:
-      - "https://fefs.ucv.ro/admitere/licenta"
-      - "https://fefs.ucv.ro/admitere/master"
-
-  - name: "Facultatea de Teologie Ortodoxă"
-    slug: "teologie"
-    urls: 
-      - "https://teologie.ucv.ro/admitere/licenta"
+      - "https://efs.ucv.ro/admitere.php"
 
   - name: "Facultatea de Mecanică"
     slug: "mecanica"
     urls:
-      - "https://mecanica.ucv.ro/admitere/licenta"
-      - "https://mecanica.ucv.ro/admitere/master"
+      - "https://mecanica.ucv.ro/Admitere/admitere.html"
 
   - name: "Facultatea de Inginerie Electrică"
     slug: "ie"
     urls:
-      - "https://ie.ucv.ro/admitere/licenta"
-      - "https://ie.ucv.ro/admitere/master"
+      - "http://ie.ucv.ro/index.php/ro/admitereh"
 
   - name: "Facultatea de Economie și Administrarea Afacerilor"
     slug: "feaa"
     urls:
-      - "https://feaa.ucv.ro/admitere/licenta"
-      - "https://feaa.ucv.ro/admitere/master"
+      - "https://feaa.ucv.ro/admitere/licenta" # Kept as is if working, or use generic
+      - "http://feaa.ucv.ro/one/index.php?option=com_content&view=article&id=169&Itemid=550&lang=ro"
 
   - name: "Facultatea de Drept"
     slug: "drept"
     urls:
-      - "https://drept.ucv.ro/admitere/licenta"
-      - "https://drept.ucv.ro/admitere/master"
+      - "https://drept.ucv.ro/"
+      - "https://drept.ucv.ro/admitere"
 
   - name: "Facultatea de Agronomie"
     slug: "agronomie"
@@ -83,11 +74,14 @@ faculties:
   - name: "Facultatea de Horticultură"
     slug: "horticultura"
     urls:
-      - "https://horticultura.ucv.ro/admitere/licenta"
-      - "https://horticultura.ucv.ro/admitere/master"
+      - "http://horticultura.ucv.ro/horticultura/ro/admitere"
 
   - name: "Facultatea de Științe Sociale"
     slug: "sociale"
     urls:
-      - "https://stiintesociale.ucv.ro/admitere/licenta"
-      - "https://stiintesociale.ucv.ro/admitere/master"
+      - "http://stiintesociale.ucv.ro/admitere.html"
+
+  - name: "Facultatea de Teologie Ortodoxă"
+    slug: "teologie"
+    urls:
+      - "https://teologie.ucv.ro/admitere/licenta"

@@ -6,6 +6,8 @@ from typing import List, Dict, Optional, Tuple
 from typing import List, Dict, Optional, Tuple
 import unicodedata
 from execution.enrichment.boilerplate import BoilerplateRejector
+from pdf2image import convert_from_path
+import pytesseract
 
 logger = logging.getLogger("pdf_parser")
 
@@ -17,6 +19,19 @@ class PDFParser:
     def __init__(self):
         self.logger = logger
         self.boilerplate_rejector = BoilerplateRejector(threshold_ratio=0.6)
+
+    def _ocr_pdf_to_text(self, pdf_path: str) -> str:
+        """Fallback: render PDF pages to images and OCR them with Tesseract."""
+        try:
+            images = convert_from_path(pdf_path, dpi=200)
+            texts = []
+            for img in images:
+                txt = pytesseract.image_to_string(img, lang='ron+eng')  # romanian + english
+                texts.append(txt)
+            return "\n".join(texts)
+        except Exception as e:
+            self.logger.error(f"OCR failed for {pdf_path}: {e}")
+            return ""
 
     def extract_spots(self, pdf_path: str) -> List[Dict]:
         """
@@ -36,8 +51,69 @@ class PDFParser:
         if results:
              self.logger.info(f"PDF extraction (Text Strategy) success: {len(results)} rows.")
         else:
-             self.logger.warning("PDF extraction failed with both strategies.")
+             # Strategy 3: OCR Fallback
+             self.logger.info("Text Strategy returned 0 rows. Attempting OCR Strategy...")
+             try:
+                 ocr_text = self._ocr_pdf_to_text(pdf_path)
+                 if ocr_text and len(ocr_text) > 100:
+                     self.logger.info(f"OCR success ({len(ocr_text)} chars). Re-running Regex Strategy on OCR text...")
+                     # Create a virtual page for common logic
+                     # We can reuse _extract_via_text logic if we mock pdfplumber behavior or just duplicate the regex run.
+                     # Simpler to duplicate regex run here for safety to avoid altering _extract_via_text signature too much.
+                     results = self._extract_from_string(ocr_text) 
+             except Exception as e:
+                 self.logger.error(f"OCR Strategy failed: {e}")
+
+        if not results:
+             self.logger.warning("PDF extraction failed with all strategies.")
              
+        return results
+
+    def _extract_from_string(self, raw_text: str) -> List[Dict]:
+        """Runs the regex extractors on a single string (from OCR)."""
+        results = []
+        try:
+             # Patterns (Duplicate from _extract_via_text for now to avoid refactor complexity)
+             name_chars = r"[A-Za-zȘȚĂÂÎșțăâî\d\s\-\(\),\./&]+"
+             p1 = re.compile(
+                 r'(?:Specializarea|Programul|Domeniul|DISCIPLINA)\s*[:\-]?\s*(' + name_chars + r')[\s\S]{0,300}?Locuri\s*buget\s*[:\-]?\s*(\d+)[\s\S]{0,100}?Locuri\s*tax[aă]\s*[:\-]?\s*(\d+)',
+                 re.IGNORECASE
+             )
+             p2 = re.compile(
+                 r'^(' + name_chars + r'?)\s+(\d+)\s*loc.*?buget.*?(\d+)\s*loc.*?tax',
+                 re.MULTILINE | re.IGNORECASE
+             )
+             
+             clean_text = self.boilerplate_rejector.clean_text([raw_text])
+             clean_text = unicodedata.normalize("NFKD", clean_text)
+             clean_text = clean_text.replace("-\n", "").replace("\n", " ")
+
+             for m in p1.finditer(clean_text):
+                 results.append({
+                     "program_name": m.group(1).strip(),
+                     "spots_budget": int(m.group(2)),
+                     "spots_tax": int(m.group(3)),
+                     "level": "Unknown", 
+                     "domain": None,
+                     "raw_row": m.group(0)[:100],
+                     "page": 1,
+                     "source": "ocr"
+                 })
+             for m in p2.finditer(clean_text):
+                 name = m.group(1).strip()
+                 if len(name) > 5 and not any(r["program_name"] == name for r in results):
+                     results.append({
+                         "program_name": name,
+                         "spots_budget": int(m.group(2)),
+                         "spots_tax": int(m.group(3)),
+                         "level": "Unknown",
+                         "domain": None,
+                         "raw_row": m.group(0),
+                         "page": 1,
+                         "source": "ocr"
+                     })
+        except Exception as e:
+             self.logger.error(f"OCR Regex failed: {e}")
         return results
 
     def _extract_via_tables(self, pdf_path: str) -> List[Dict]:

@@ -8,3 +8,5 @@ camelot-py
 opencv-python-headless
 pytesseract
 rapidfuzz
+pdf2image
+playwright
