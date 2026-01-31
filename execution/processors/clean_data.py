@@ -4,6 +4,11 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any
 
+FACULTY_URL_PATTERN = re.compile(r'https?://([^.]+)\.ucv\.ro')
+CLEAN_PARENS_PATTERN = re.compile(r'\(\s*(aici|detalii|vezi|link)\s*\)', flags=re.IGNORECASE)
+CLEAN_BRACKETS_PATTERN = re.compile(r'\[.*?\]')
+CLEAN_SPACES_PATTERN = re.compile(r'\s+')
+
 class DataCleaner:
     def __init__(self, input_csv: str, output_json: str):
         self.input_csv = Path(input_csv)
@@ -50,7 +55,7 @@ class DataCleaner:
             faculty_code = "unknown"
             if url:
                 # regex for subdomain
-                m = re.search(r'https?://([^.]+)\.ucv\.ro', url)
+                m = FACULTY_URL_PATTERN.search(url)
                 if m:
                     faculty_code = m.group(1)
             
@@ -76,14 +81,15 @@ class DataCleaner:
     def _clean_name(self, name: str) -> str:
         if not name: return "Unknown"
         
+        
         # Remove (aici), (detalii), etc
-        name = re.sub(r'\(\s*(aici|detalii|vezi|link)\s*\)', '', name, flags=re.IGNORECASE)
+        name = CLEAN_PARENS_PATTERN.sub('', name)
         
         # Remove [Metadata]
-        name = re.sub(r'\[.*?\]', '', name)
+        name = CLEAN_BRACKETS_PATTERN.sub('', name)
         
         # Remove extra spaces
-        name = re.sub(r'\s+', ' ', name).strip()
+        name = CLEAN_SPACES_PATTERN.sub(' ', name).strip()
         
         # Title Case (Simple)
         # Handle specialized casing? For now, .title() is decent but might break acronyms

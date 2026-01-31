@@ -2,6 +2,7 @@ import json
 import logging
 import hashlib
 from pathlib import Path
+from execution.models.provenance import ProvenanceMixin
 from typing import List, Dict, Any, Optional
 import re
 from rapidfuzz import fuzz
@@ -197,10 +198,9 @@ class DataFusionEngine:
     """
     Fuses scraped HTML data (Programs) with parsed PDF data (Spots).
     """
-    def __init__(self, run_id: str):
+    def __init__(self, run_id: str, admission_year: int = None):
         self.run_id = run_id
         self.base_dir = Path("data/runs") / run_id
-        self.pdf_parser = PDFParser()
         # V9: Validator
         from execution.processors.validator import SemanticValidator
         self.validator = SemanticValidator()
@@ -208,30 +208,32 @@ class DataFusionEngine:
         # V8: Dynamic Year
         self.pdf_parser = PDFParser()
         # V8: Dynamic Year
-        self.admission_year = datetime.datetime.now().year
+        self.admission_year = admission_year or datetime.datetime.now().year
         self.ranker = PDFTruthRanker(admission_year=self.admission_year)
+
 
     def _resolve_faculty_uid(self, slug: str) -> Optional[str]:
         """
         Locates the Faculty entity JSON in the Raw directory to get its hash UID.
+        Fallback: Deterministic generation.
         """
         raw_dir = self.base_dir / "raw" / slug
-        if not raw_dir.exists(): return None
+        if raw_dir.exists():
+            for f in raw_dir.glob("*.json"):
+                if f.name == "pdf_queue.json": continue
+                if f.name == "manifest.json": continue
+                
+                try:
+                    with open(f, "r", encoding="utf-8") as file:
+                        data = json.load(file)
+                        if data.get("entity_type") == "faculty":
+                            return data.get("uid")
+                except Exception:
+                    continue
         
-        # Look for the only JSON file that IS NOT pdf_queue.json
-        for f in raw_dir.glob("*.json"):
-            if f.name == "pdf_queue.json": continue
-            if f.name == "manifest.json": continue
-            
-            try:
-                with open(f, "r", encoding="utf-8") as file:
-                    data = json.load(file)
-                    if data.get("entity_type") == "faculty":
-                        return data.get("uid")
-            except Exception:
-                continue
-        return None
-    
+        # Fallback: Deterministic UID
+        return ProvenanceMixin.generate_uid(f"faculty:{slug}")
+
     def enrich_run(self):
         """
         Main entry point: Enriches the entire run.
@@ -260,9 +262,7 @@ class DataFusionEngine:
         
         # 0. Resolve Faculty UID
         faculty_uid = self._resolve_faculty_uid(slug)
-        if not faculty_uid:
-            logger.warning(f"[{slug}] Could not resolve Faculty UID. Using slug as fallback.")
-            faculty_uid = slug
+        logger.info(f"[{slug}] Resolved Faculty UID: {faculty_uid}")
 
         # 1. Load Scraped Programs
         programs_dir = self.base_dir / "raw" / slug / "programs"
@@ -381,7 +381,7 @@ class DataFusionEngine:
         candidates = [p for p in pdf_queue if p.get("link_text") and (p.get("pdf_url") or p.get("url"))]
         
         # Ranker
-        ranker = PDFTruthRanker(admission_year=2026) # TODO: Make Configurable
+        ranker = PDFTruthRanker(admission_year=self.admission_year)
         ranked_candidates = ranker.rank_candidates(candidates)
         
         # Log top picks
@@ -391,14 +391,68 @@ class DataFusionEngine:
             
         return ranked_candidates
 
-    def _fuse_data(self, slug: str, programs: List[Dict], pdf_rows: List[Dict], pdf_url: str, faculty_uid: str, grades_map: Dict = None, likelihood_score: float = 0, source_name: str = ""):
+    def _generate_program_id(self, slug: str, name: str) -> str:
+        """
+        Rule 1: Deterministic Program ID.
+        """
+        # Canonicalize name for ID generation (remove punctuation, lower)
+        clean_name = self._romanian_normalize(name)
+        raw_id = f"{slug}|{clean_name}"
+        return hashlib.sha256(raw_id.encode()).hexdigest()
+
+    def _infer_admission_year(self, source_url: str, content_text: str = "") -> int:
+        """
+        Rule 1b: Infer Admission Year.
+        """
+        # 1. Try URL
+        match = re.search(r"202[0-9]", source_url)
+        if match:
+            return int(match.group(0))
+            
+        # 2. Try Text
+        if content_text:
+            match = re.search(r"202[0-9]", content_text)
+            if match:
+                return int(match.group(0))
+                
+        # 3. Default
+        return self.admission_year
+
+    def _calculate_likelihood(self, text_match_score: float, ocr_confidence: float = 0.5, source_priority: float = 1.0) -> float:
+        """
+        Fused Likelihood Score (0.0 - 1.0).
+        Formula: weighted mean of signals.
+        """
+        # Normalize inputs to 0-1
+        norm_match = min(max(text_match_score, 0), 1.0) # Matches are usually 0-1 already (if coming from ratio/100) or 0-100
+        if text_match_score > 1.0: norm_match = text_match_score / 100.0
+        
+        # Ocr confidence placeholder (default 0.9 for native PDF, 0.7 for OCR)
+        # For now assume native PDF usually
+        
+        # Weights
+        w_match = 0.6
+        w_prio = 0.4
+        
+        score = (norm_match * w_match) + (source_priority * w_prio)
+        return round(score, 4)
+
+    def _fuse_data(self, slug: str, programs: List[Dict], pdf_rows: List[Dict], pdf_url: str, faculty_uid: str, grades_map: Dict = None, likelihood_score_base: float = 0, source_name: str = ""):
         """
         Fuzzy matching logic using V4 Matcher.
         V8: Now accepting explicit faculty_uid (Hash) and slug.
+        V10: Enhanced Fusion (Rule 1, 2, 3 Implemented)
         """
+        
         # V9: Zero Garbage Validation (apply to all PDF rows)
         filtered_rows = []
         for row in pdf_rows:
+            # Clean Name Hygiene (Rule 2) inline or warn?
+            # Validator has logic but doesn't mutate. Matcher can mutate.
+            if "locuri" in row.get("program_name", "").lower():
+                 # Attempt simple cleanup
+                 row['program_name'] = re.sub(r"(?:B[:\s]*|B\s*[:]?|locuri(?:\s+la\s+buget)?)[^\d]*(?P<budget>\d+)|(?P<tax>\d+)\s*(?:locuri|cu taxă|taxă)|B:\s*(?P<b2>\d+)\s*T:\s*(?P<t2>\d+)", "", row['program_name'], flags=re.IGNORECASE).strip(" -–—:,.")
+
             val_res = self.validator.validate_program_name(row.get("program_name", ""))
             if val_res["status"] == "FAIL":
                 logger.warning(f"[{slug}] Dropping Garbage Candidate: '{row.get('program_name')}' (Reason: {val_res['reason']})")
@@ -418,21 +472,29 @@ class DataFusionEngine:
             logger.info(f"[{slug}] PDF-Only Mode: Synthesizing {len(filtered_rows)} programs from PDF.")
             for row in filtered_rows:
 
-                # Create Minimal Program Entity
+                # Rule 1: Deterministic ID
+                p_id = self._generate_program_id(slug, row['program_name'])
                 match_id = hashlib.sha256(f"{slug}|{row['program_name']}".encode()).hexdigest()
+                
+                # Rule 1b: Admission Year
+                adm_year = self._infer_admission_year(pdf_url)
+                
+                # Likelihood
+                lik_score = self._calculate_likelihood(1.0, source_priority=0.8)
+
                 career_paths = self._infer_career_paths(row['program_name'])
                 prog = {
                     "uid": match_id,
+                    "program_id": p_id, # MANDATORY field populated
                     "name": row['program_name'],
                     "spots_budget": row['spots_budget'],
                     "spots_tax": row['spots_tax'],
                     "language": "ro", # Default
-                    "level": row.get("level", "Master"), # V8: Use Detected Level or Default
+                    "level": self._normalize_level(row.get("level", "Master")), 
                     "entity_type": "program",
                     "source_type": "pdf_only",
-                    "faculty_uid": faculty_uid, # V8: True UID
-                    "faculty_slug": slug,      # V8: Convenience Slug
-                    "run_id": self.run_id,
+                    "faculty_uid": faculty_uid, 
+                    "faculty_slug": slug,      
                     "run_id": self.run_id,
                     "scraped_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "source_url": pdf_url,
@@ -445,9 +507,20 @@ class DataFusionEngine:
                         f"[INFERENCE]\n"
                         f"Cariera: {', '.join(career_paths)}"
                     ),
-                    "metadata": {"original_pdf": pdf_url},
+                    "evidence": {
+                        "spots": [{
+                            "source": pdf_url, 
+                            "value": {"budget": row['spots_budget'], "tax": row['spots_tax']},
+                            "likelihood_score": lik_score,
+                            "match_score": 1.0,
+                            "page": row.get("page", 1), # Default to 1 if missing
+                            "snippet": row.get("raw_row", "")[:100],
+                            "timestamp": datetime.datetime.now().isoformat()
+                        }]
+                    },
+                    "metadata": {"original_pdf": pdf_url, "match_status": "new_from_pdf"},
                     "career_paths": career_paths,
-                    "admission_year": self.admission_year
+                    "admission_year": adm_year
                 }
                 self._save_program(slug, prog)
             return
@@ -458,18 +531,34 @@ class DataFusionEngine:
         for res in results:
             prog = res["program"]
             match = res["match"]
-            score = res["score"]
+            score = res["score"] # 0-1 scpre
             status = res["status"]
             
             html_name = prog["name"]
             
+            # Rule 1: Ensure IDs present
+            if not prog.get("program_id"):
+                 prog["program_id"] = self._generate_program_id(slug, prog["name"])
+            if not prog.get("admission_year"):
+                 prog["admission_year"] = self._infer_admission_year(prog.get("source_url", ""), prog.get("name", ""))
+
             # V8: Ensure IDs are consistent even for HTML programs
             prog["faculty_uid"] = faculty_uid
             prog["faculty_slug"] = slug
             
-            if match and score > 0.65: # New threshold for weighted score
+            if match and score > 0.65: 
                 match_name = match["program_name"]
                 logger.info(f"Match ({status}): '{html_name}' <-> '{match_name}' ({score:.2f})")
+                
+                # Rule 3 / Likelihood
+                lik_score = self._calculate_likelihood(score, source_priority=likelihood_score_base/100.0 if likelihood_score_base else 0.8) # likelihood_score_base is usually negative or huge, normalize?
+                # Actually likelihood_score_base passed in is PDF Content Score (e.g. 20, 30). Normalize to 0.2-1.0
+                prio = 0.5
+                if likelihood_score_base > 10: prio = 0.9
+                elif likelihood_score_base > 0: prio = 0.7
+                
+                lik_score = self._calculate_likelihood(score, source_priority=prio)
+
                 
                 if status == "ambiguous":
                     logger.warning(f"  [AMBIGUOUS] Check manually: {html_name}")
@@ -483,9 +572,11 @@ class DataFusionEngine:
                     "source": pdf_url,
                     "source_name": source_name,
                     "value": {"budget": match.get("spots_budget", 0), "tax": match.get("spots_tax", 0)},
-                    "score": likelihood_score, # Content score of the PDF
+                    "score": likelihood_score_base, # Keep raw content score for debug
                     "match_score": score, # Fuzzy match score
-                    "page": match.get("page"), # Provenance: Page Number
+                    "likelihood_score": lik_score, # Fused Probability
+                    "page": match.get("page", 1), 
+                    "snippet": match.get("raw_row", "")[:100],
                     "timestamp": datetime.datetime.now().isoformat()
                 }
                 prog["evidence"]["spots"].append(evidence_entry)
@@ -493,7 +584,7 @@ class DataFusionEngine:
                 # Arbitrate: Pick Highest Score (Content + Match)
                 # Simple logic: If this match is better than current 'source_score', overwrite.
                 current_score = prog.get("metadata", {}).get("best_source_score", -999)
-                this_total_score = likelihood_score + (score * 10) # Weighted
+                this_total_score = likelihood_score_base + (score * 10) # Weighted
                 
                 if this_total_score > current_score:
                     prog["spots_budget"] = match.get("spots_budget", 0)
@@ -505,6 +596,7 @@ class DataFusionEngine:
                     prog["metadata"]["pdf_match_name"] = match_name
                     prog["metadata"]["pdf_source"] = pdf_url
                     prog["metadata"]["match_status"] = status
+                    prog["accuracy_confidence"] = lik_score # Update main confidence
                     
                     # Update Embedding Text
                     career_paths = prog.get("career_paths", self._infer_career_paths(html_name))
@@ -520,6 +612,8 @@ class DataFusionEngine:
                 self._save_program(slug, prog)
             else:
                 logger.info(f"No match for '{html_name}' (Best Score: {score:.2f})")
+                # Even if no match, ensure ID and Year are saved (Rule 1)
+                self._save_program(slug, prog)
                 
             # V8.6: Fuse Grades (Independent of Spots Match)
             if grades_map:
@@ -584,6 +678,14 @@ class DataFusionEngine:
         with open(q_dir / f"{uid}.json", "w", encoding="utf-8") as f:
             json.dump(item, f, indent=2, ensure_ascii=False)
 
+    def _normalize_level(self, text: str) -> str:
+        if not text: return "Unknown"
+        t = text.lower()
+        if "master" in t: return "Master"
+        if "licent" in t or "licenț" in t or "bachelor" in t: return "Bachelor"
+        if "doctor" in t or "phd" in t: return "PhD"
+        return "Unknown"
+
     def _romanian_normalize(self, text: str) -> str:
         if not text: return ""
         text = text.lower()
@@ -598,7 +700,7 @@ if __name__ == "__main__":
     import sys
     logging.basicConfig(level=logging.INFO)
     if len(sys.argv) < 2:
-        print("Usage: python matcher.py <run_id>")
+        print("Usage: python execution/enrichment/matcher.py <run_id>")
         sys.exit(1)
     
     engine = DataFusionEngine(sys.argv[1])

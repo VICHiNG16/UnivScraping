@@ -3,6 +3,7 @@ import re
 import statistics
 import pdfplumber
 from typing import List, Dict, Optional, Tuple
+from pathlib import Path
 
 logger = logging.getLogger("grade_parser")
 
@@ -21,6 +22,7 @@ class LastAdmissionGradeParser:
         """
         results = {}
         processed_programs = {} # name -> list of grades
+        context_name = Path(pdf_path).stem  # Default context from filename
         
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -35,7 +37,7 @@ class LastAdmissionGradeParser:
                     # 2. Table Strategy (Scan columns for "Medie")
                     tables = page.extract_tables()
                     for table in tables:
-                        self._process_table(table, processed_programs)
+                        self._process_table(table, processed_programs, context_name)
                         
         except Exception as e:
             logger.error(f"Error parsing grades from {pdf_path}: {e}")
@@ -64,7 +66,7 @@ class LastAdmissionGradeParser:
         # Skip for now unless structured.
         return found
         
-    def _process_table(self, table: List[List[str]], accumulator: Dict[str, List[float]]):
+    def _process_table(self, table: List[List[str]], accumulator: Dict[str, List[float]], context_name: str = "Unknown"):
         """
         Identifies "Medie" column and extracts numbers.
         Associates with Program Name if present in row or header.
@@ -86,8 +88,7 @@ class LastAdmissionGradeParser:
                 
         if grade_col_idx == -1: return
         
-        current_program = "Unknown" # If name column missing, might be PDF-level program?
-        # TODO: Pass PDF context (program name from filename/metadata)
+        current_program = context_name # Use passed context as default
         
         for row in table[1:]:
             if len(row) <= grade_col_idx: continue

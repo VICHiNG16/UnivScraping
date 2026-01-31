@@ -67,27 +67,9 @@ class RAGSchemaConverter:
             language = "fr"
             
         # 2. Inferred Fields (Heuristics - Expanded V8)
-        # TODO: Move to shared ontology
-        mapping = {
-            "agricultura": ["Inginer Agronom", "Fermier", "Consultant Agricol"],
-            "montanologie": ["Inginer Montan", "Ranger", "Expert Dezvoltare Rurală"],
-            "cadastru": ["Inginer Cadastru", "Topograf", "Geodez"],
-            "biologie": ["Biolog", "Cercetător", "Profesor"],
-            "peisagistic": ["Arhitect Peisagist", "Designer Grădini"],
-            "alimentar": ["Inginer Industrie Alimentară", "Controlor Calitate"],
-            "horticultur": ["Horticultor", "Manager Fermă"],
-            "silvicultur": ["Inginer Silvic", "Pădurar"],
-            "mediu": ["Ecolog", "Inspector Protecția Mediului"],
-            "management": ["Manager Proiect", "Administrator"],
-            "calc": ["Software Engineer", "Data Analyst", "DevOps"],
-            "info": ["Software Engineer", "Data Analyst", "DevOps"],
-            "auto": ["Automation Engineer", "Robotics Specialist"],
-            "robot": ["Automation Engineer", "Robotics Specialist"],
-            "mec": ["Mechanical Engineer", "CAD Designer"],
-            "drept": ["Avocat", "Jurist", "Magistrat"],
-            "econom": ["Economist", "Analist Financiar"],
-            "litere": ["Traducator", "Profesor", "Copywriter"]
-        }
+        # 2. Inferred Fields (Heuristics - Expanded V8)
+        from execution.models.ontology import CAREER_PATH_MAPPING
+        mapping = CAREER_PATH_MAPPING
         
         career_paths = []
         for key, paths in mapping.items():

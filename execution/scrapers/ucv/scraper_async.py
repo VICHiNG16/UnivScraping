@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import aiofiles
 import logging
 import time
 import socket
@@ -179,8 +180,8 @@ class DomainAwareScraper:
                         # replicate BaseScraper save_entity contract
                         (self.base_dir / slug / "programs").mkdir(parents=True, exist_ok=True)
                         fname = f"{p.uid}.json"
-                        with open(self.base_dir / slug / "programs" / fname, "w", encoding="utf-8") as f:
-                            f.write(p.model_dump_json(indent=2))
+                        async with aiofiles.open(self.base_dir / slug / "programs" / fname, "w", encoding="utf-8") as f:
+                            await f.write(p.model_dump_json(indent=2))
 
                     programs_found_total += len(programs)
 

@@ -88,8 +88,8 @@ class AsyncPDFDownloader:
                 pdf_dir.mkdir(parents=True, exist_ok=True)
                 pdf_path = pdf_dir / f"{pdf_hash}.pdf"
                 
-                with open(pdf_path, "wb") as f:
-                    f.write(pdf_bytes)
+                async with aiofiles.open(pdf_path, "wb") as f:
+                    await f.write(pdf_bytes)
                 
                 # Success - Reset Circuit Breaker for this domain
                 self.circuit_breakers[domain] = 0

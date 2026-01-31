@@ -1,8 +1,9 @@
 
 import json
 import logging
+import yaml
 from pathlib import Path
-from execution.scrapers.ucv.scraper import UCVScraper
+
 
 logger = logging.getLogger("snapshot_parser")
 
@@ -11,7 +12,16 @@ class SnapshotParser:
         self.run_id = run_id
         self.base_dir = Path(f"data/runs/{run_id}/raw")
         # Instantiate scraper to access extraction logic
-        self.scraper = UCVScraper(run_id) 
+        from execution.scrapers.ucv.scraper import UCVScraper
+        self.scraper = UCVScraper(run_id)
+        
+        # Load Config
+        self.config = {}
+        try:
+            with open("execution/scrapers/ucv/config.yaml", "r", encoding="utf-8") as f:
+                self.config = yaml.safe_load(f)
+        except Exception as e:
+            logger.warning(f"Could not load ucv/config.yaml: {e}") 
 
     def parse_all(self):
         if not self.base_dir.exists():
@@ -47,9 +57,13 @@ class SnapshotParser:
             # Prepare Queues
             pdf_queue = []
             
-            # Determine Faculty Name (hacky, or re-read config)
-            # UCVScraper._extract needs name.
-            faculty_name = slug.upper() # Placeholder if not in config lookup
+            # Determine Faculty Name
+            faculty_name = slug.upper() # Fallback
+            if self.config and "faculties" in self.config:
+                for f in self.config["faculties"]:
+                    if f.get("slug") == slug:
+                        faculty_name = f.get("name")
+                        break
             
             # Setup Directories (Important!)
             self.scraper.setup_directories(slug)
