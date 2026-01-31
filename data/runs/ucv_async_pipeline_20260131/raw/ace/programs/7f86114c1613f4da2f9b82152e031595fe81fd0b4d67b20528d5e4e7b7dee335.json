@@ -6,15 +6,15 @@
   "content_hash": "99f4c5efe0035d9b90dcd35782d51e43f131998b46218557046dd96357239814",
   "entity_type": "program",
   "name": "Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă",
-  "faculty_uid": "ace",
+  "faculty_uid": "7e9229594df73ea968c4ac9b91da33485af0874d0176011e0126d317cd841e60",
   "faculty_slug": "ace",
   "level": "Master",
   "duration_years": "2 ani",
-  "program_id": null,
+  "program_id": "da18380a49ef4926724998d704f7d55ca6e1bd0b666f6d1941d7a963861649b4",
   "language": "English",
   "keywords": [],
   "text_for_embedding": "Programul: Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă (Master)\nFacultate: ACE\nLocuri Buget: None (Sursa: PDF aici)\nLocuri Taxa: None (Sursa: PDF aici)\n[INFERENCE]\nCariera: Specific domeniului",
-  "admission_year": null,
+  "admission_year": 2026,
   "spots_budget": null,
   "spots_tax": null,
   "spots_raw": "Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă [Domain: Calculatoare şi Tehnologia Informației, un număr de 2 locuri la buget și 31 de locuri cu taxă: Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă; Master în Securitate cibernetică și tehnologii cuantice , 10 locuri cu taxă; Master în Inginerie software , 1 loc la buget și 10 locuri cu taxă.]",
@@ -47,6 +47,34 @@
         "match_score": 0.8,
         "page": null,
         "timestamp": "2026-01-31T14:57:53.577585"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "likelihood_score": 0.76,
+        "page": 1,
+        "snippet": "['2', 'Calculatoare și Tehnologia\\nInformației', 'Artificial intelligence and applied\\ncomputing\\n(c",
+        "timestamp": "2026-01-31T15:29:45.643806"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/Modalitate%20Admitere%20MASTER%20Septembrie%202025.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "likelihood_score": 0.76,
+        "page": 1,
+        "snippet": "['2', 'Calculatoare și Tehnologia\\nInformației', 'Artificial intelligence and applied\\ncomputing\\n(c",
+        "timestamp": "2026-01-31T15:29:45.655692"
       }
     ]
   },

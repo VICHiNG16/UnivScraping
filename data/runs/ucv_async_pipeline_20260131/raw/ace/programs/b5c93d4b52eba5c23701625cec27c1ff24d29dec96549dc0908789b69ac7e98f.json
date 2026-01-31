@@ -6,15 +6,15 @@
   "content_hash": "1a1cc3c482287ce872401ecefb9f3c30e65829c06c7f977b5f7932a581663026",
   "entity_type": "program",
   "name": "Master în Inginerie software",
-  "faculty_uid": "ace",
+  "faculty_uid": "7e9229594df73ea968c4ac9b91da33485af0874d0176011e0126d317cd841e60",
   "faculty_slug": "ace",
   "level": "Master",
   "duration_years": "2 ani",
-  "program_id": null,
+  "program_id": "258919d1bcc4ffa5a6a7e4553eadc4aa29fb39b75c9f0a62f7dbe3d58f8f3d1f",
   "language": "Romanian",
   "keywords": [],
   "text_for_embedding": "Programul: Master în Inginerie software (Master)\nFacultate: ACE\nLocuri Buget: None (Sursa: PDF aici)\nLocuri Taxa: None (Sursa: PDF aici)\n[INFERENCE]\nCariera: Specific domeniului",
-  "admission_year": null,
+  "admission_year": 2026,
   "spots_budget": null,
   "spots_tax": null,
   "spots_raw": "Master în Inginerie software [Domain: Calculatoare şi Tehnologia Informației, un număr de 2 locuri la buget și 31 de locuri cu taxă: Master în Artificial intelligence and applied computing (program cu predare în limba engleză ) 2 locuri la buget și 11 locuri cu taxă; Master în Securitate cibernetică și tehnologii cuantice , 10 locuri cu taxă; Master în Inginerie software , 1 loc la buget și 10 locuri cu taxă.]",
@@ -47,6 +47,34 @@
         "match_score": 0.8,
         "page": null,
         "timestamp": "2026-01-31T14:57:53.578061"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/Modalitate%20Admitere%20MASTER%202025%20-%202026.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "likelihood_score": 0.76,
+        "page": 1,
+        "snippet": "[None, None, 'Inginerie software', None, None]",
+        "timestamp": "2026-01-31T15:29:45.644407"
+      },
+      {
+        "source": "https://ace.ucv.ro/pdf/admitere/2025/master/septembrie/Modalitate%20Admitere%20MASTER%20Septembrie%202025.pdf",
+        "source_name": "aici",
+        "value": {
+          "budget": null,
+          "tax": null
+        },
+        "score": 10.0,
+        "match_score": 0.8,
+        "likelihood_score": 0.76,
+        "page": 1,
+        "snippet": "[None, None, 'Inginerie software', None, None]",
+        "timestamp": "2026-01-31T15:29:45.656285"
       }
     ]
   },
