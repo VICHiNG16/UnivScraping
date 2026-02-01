@@ -196,6 +196,31 @@ class PDFParser:
                                  if col_map["budget"] > 0: col_map["name"] = 0
                                  elif col_map["budget"] == -1: col_map["name"] = 0 # Default
 
+                        # HEURISTIC: Implicit Column Mapping (if explicit headers failed)
+                        if col_map["budget"] == -1:
+                            # Try to deduce from first valid data row that looks like: Text ... Int ... Int
+                            for r_idx, row in enumerate(table):
+                                if not row or r_idx < 2: continue # Skip top 2 rows (titles)
+
+                                int_cols = []
+                                text_cols = []
+                                for idx, cell in enumerate(row):
+                                    c_str = str(cell).strip() if cell else ""
+                                    if self._parse_int(c_str) is not None:
+                                        int_cols.append(idx)
+                                    elif len(c_str) > 5 and not any(k in c_str.lower() for k in ["total", "universitatea", "facultatea"]):
+                                        text_cols.append(idx)
+
+                                # If we found at least 2 numbers and 1 text, and text is BEFORE numbers
+                                if len(int_cols) >= 2 and len(text_cols) >= 1:
+                                    if text_cols[0] < int_cols[0]:
+                                        col_map["name"] = text_cols[0]
+                                        col_map["budget"] = int_cols[0]
+                                        col_map["tax"] = int_cols[1]
+                                        self.logger.info(f"Implicit Column Map inferred at row {r_idx}: {col_map}")
+                                        max_header_row = r_idx - 1
+                                        header_found = True
+                                        break
 
                         # Process Data Rows
                         if header_found and max_header_row != -1:
@@ -233,7 +258,21 @@ class PDFParser:
                                 if tax is None and not header_found and len(row) > 5:
                                     tax = self._parse_int(row[5])
 
-                                
+                                # FALLBACK: Greedy Integer Search (if mapped columns failed)
+                                if (budget is None and tax is None):
+                                    # Find all integers after name column
+                                    ints = []
+                                    for cell in row[name_idx+1:]:
+                                        val = self._parse_int(cell)
+                                        if val is not None:
+                                            ints.append(val)
+
+                                    if len(ints) >= 1:
+                                        budget = ints[0]
+                                    if len(ints) >= 2:
+                                        tax = ints[1]
+                                    if len(ints) > 0:
+                                         self.logger.debug(f"Greedy Fallback used for {name}: B={budget}, T={tax}")
 
                                 # Debug Logging
                                 self.logger.debug(f"Row[{len(row)}] Name='{name}' B_idx={col_map['budget']} T_idx={col_map['tax']} -> B={budget}, T={tax}")

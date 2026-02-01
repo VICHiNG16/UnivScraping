@@ -10,3 +10,4 @@ pytesseract
 rapidfuzz
 pdf2image
 playwright
+rapidfuzz

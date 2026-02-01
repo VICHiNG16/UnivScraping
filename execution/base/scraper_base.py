@@ -11,6 +11,7 @@ from execution.base.browser_manager import BrowserManager
 from execution.models.provenance import ProvenanceMixin
 from pydantic import BaseModel
 from execution.scrapers.adapter_interface import UniversityAdapter
+from rapidfuzz import process, fuzz
 
 class BaseScraper(ABC):
     """
@@ -155,6 +156,58 @@ class BaseScraper(ABC):
         with open(self.base_dir / "manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
 
+    def _enrich_from_pdf(self, slug: str, pdf_path: str, pdf_url: str):
+        """
+        Stage B: Parse PDF and update Program entities.
+        """
+        try:
+            spots_data = self.adapter.parse_spots(pdf_path)
+            if not spots_data: return
+
+            self.logger.info(f"Enriching {slug} with {len(spots_data)} rows from PDF.")
+
+            # Load all programs for this faculty
+            programs_dir = self.raw_dir / slug / "programs"
+            programs = []
+            program_files = {} # idx -> filepath
+
+            if not programs_dir.exists(): return
+
+            # Read all JSONs
+            for i, p_file in enumerate(programs_dir.glob("*.json")):
+                try:
+                    with open(p_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        programs.append(data)
+                        program_files[i] = p_file
+                except: pass
+
+            if not programs: return
+
+            # Match
+            program_names = [p["name"] for p in programs]
+
+            for row in spots_data:
+                p_name = row["program_name"]
+                # Fuzzy match
+                match = process.extractOne(p_name, program_names, scorer=fuzz.token_sort_ratio)
+                if match:
+                    best_name, score, idx = match
+                    if score > 85:
+                        # Update
+                        prog = programs[idx]
+                        prog["spots_budget"] = row["spots_budget"]
+                        prog["spots_tax"] = row["spots_tax"]
+                        prog["spots_raw"] = f"PDF: {row['raw_row']} (Score: {score:.1f})"
+
+                        # Save immediately
+                        with open(program_files[idx], "w", encoding="utf-8") as f:
+                            json.dump(prog, f, indent=2, ensure_ascii=False)
+
+                        self.logger.info(f"Matched '{p_name}' -> '{best_name}' (B:{row['spots_budget']} T:{row['spots_tax']})")
+        except Exception as e:
+            self.logger.error(f"Enrichment failed for {pdf_path}: {e}")
+
     def _extract_from_snapshot(self, html: str, url: str, slug: str, faculty_name: str, pdf_queue: List[Dict]):
         """
         Delegates extraction logic to the Adapter.
@@ -262,3 +315,9 @@ class BaseScraper(ABC):
             q_path = self.raw_dir / slug / "pdf_queue.json"
             with open(q_path, "w", encoding="utf-8") as f:
                 json.dump(pdf_queue, f, indent=2)
+
+            # 5. Process PDF Queue (Stage B) - Enrichment
+            self.logger.info(f"[{slug}] Starting Stage B: PDF Enrichment...")
+            for cand in top_candidates:
+                if "local_path" in cand:
+                    self._enrich_from_pdf(slug, cand["local_path"], cand["pdf_url"])
