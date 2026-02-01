@@ -1,0 +1,87 @@
+university: "Universitatea din Craiova"
+university_code: "ucv"
+
+pdf_settings:
+  max_concurrent: 2
+  timeout: 60
+  circuit_breaker_limit: 3
+
+async_settings:
+  global_timeout: 45
+  circuit_breaker:
+    failure_threshold: 3
+    reset_timeout: 300
+  domain_groups:
+    ucv_main:
+      max_concurrent: 3
+      domains: ["ucv.ro"]
+    ucv_subdomains:
+      max_concurrent: 2
+      domains: ["mecanica.ucv.ro", "ie.ucv.ro", "agronomie.ucv.ro"]
+
+# Full List of 12 Faculties
+faculties:
+  - name: "Facultatea de Automatică, Calculatoare și Electronică"
+    slug: "ace"
+    urls:
+      - "https://ace.ucv.ro/admitere/licenta"
+      - "https://ace.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Litere"
+    slug: "litere"
+    urls:
+      - "https://litere.ucv.ro/litere/ro"
+      - "https://litere.ucv.ro/litere/ro/admitere"
+
+  - name: "Facultatea de Științe"
+    slug: "stiinte"
+    urls:
+      - "http://stiinte.ucv.ro/admitere.aspx"
+
+  - name: "Facultatea de Educație Fizică și Sport"
+    slug: "fefs"
+    urls:
+      - "https://efs.ucv.ro/admitere.php"
+
+  - name: "Facultatea de Mecanică"
+    slug: "mecanica"
+    urls:
+      - "https://mecanica.ucv.ro/Admitere/admitere.html"
+
+  - name: "Facultatea de Inginerie Electrică"
+    slug: "ie"
+    urls:
+      - "http://ie.ucv.ro/index.php/ro/admitereh"
+
+  - name: "Facultatea de Economie și Administrarea Afacerilor"
+    slug: "feaa"
+    urls:
+      - "https://feaa.ucv.ro/admitere/licenta" # Kept as is if working, or use generic
+      - "http://feaa.ucv.ro/one/index.php?option=com_content&view=article&id=169&Itemid=550&lang=ro"
+
+  - name: "Facultatea de Drept"
+    slug: "drept"
+    urls:
+      - "https://drept.ucv.ro/"
+      - "https://drept.ucv.ro/admitere"
+
+  - name: "Facultatea de Agronomie"
+    slug: "agronomie"
+    urls:
+      - "https://agronomie.ucv.ro/admitere/licenta"
+      - "https://agronomie.ucv.ro/admitere/master"
+
+  - name: "Facultatea de Horticultură"
+    slug: "horticultura"
+    urls:
+      - "http://horticultura.ucv.ro/horticultura/ro/admitere"
+
+  - name: "Facultatea de Științe Sociale"
+    slug: "sociale"
+    urls:
+      - "http://stiintesociale.ucv.ro/admitere.html"
+
+  - name: "Facultatea de Teologie Ortodoxă"
+    slug: "teologie"
+    urls:
+      - "https://teologie.ucv.ro/admitere/licenta"
