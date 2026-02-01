@@ -69,3 +69,11 @@ class UniversityAdapter(ABC):
         Returns: {"Program Name": 9.50, ...}
         """
         pass
+
+    @abstractmethod
+    def parse_spots(self, pdf_path: str) -> List[Dict[str, Any]]:
+        """
+        Parses a local PDF to extract Admission Spots.
+        Returns: [{"program_name": "...", "spots_budget": 10, ...}, ...]
+        """
+        pass

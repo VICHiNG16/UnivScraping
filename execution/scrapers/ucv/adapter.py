@@ -13,6 +13,7 @@ from execution.models.provenance import ProvenanceMixin
 from execution.enrichment.pdf_ranker import PDFTruthRanker
 from execution.enrichment.boilerplate import BoilerplateRejector
 from execution.processors.grade_parser import LastAdmissionGradeParser
+from execution.scrapers.ucv.pdf_parser import PDFParser
 
 class UCVAdapter(UniversityAdapter):
     def __init__(self):
@@ -20,6 +21,7 @@ class UCVAdapter(UniversityAdapter):
         self.ranker = PDFTruthRanker(admission_year=datetime.datetime.now().year)
         self.boilerplate_rejector = BoilerplateRejector()
         self.grade_parser = LastAdmissionGradeParser()
+        self.pdf_parser = PDFParser()
         
     def _load_config(self) -> Dict[str, Any]:
         try:
@@ -51,13 +53,20 @@ class UCVAdapter(UniversityAdapter):
         # Generic container for UCV
         container = soup.find("div", id="continut_standard") or soup.find("div", id="main_content") or soup
         
+        BLACKLIST = ["ghid", "documente", "acte", "cerere", "declaratie", "metodologie", "regulament", "calendar", "orar", "fise", "tematica"]
+
         for link in container.find_all("a", href=True):
             href = link["href"].strip()
             if href.lower().endswith(".pdf"):
+                text = link.get_text(strip=True)
+                # Filter noise
+                if any(b in text.lower() for b in BLACKLIST):
+                    continue
+
                 full_url = urljoin(url, href)
                 candidates.append({
                     "pdf_url": full_url,
-                    "link_text": link.get_text(strip=True),
+                    "link_text": text,
                     "source_url": url,
                     "discovered_at": datetime.datetime.now().isoformat()
                 })
@@ -412,3 +421,9 @@ class UCVAdapter(UniversityAdapter):
         Delegates to the Privacy-Safe Grade Parser.
         """
         return self.grade_parser.extract_min_grades(pdf_path)
+
+    def parse_spots(self, pdf_path: str) -> List[Dict[str, Any]]:
+        """
+        Delegates to the PDF Parser for Spot Extraction.
+        """
+        return self.pdf_parser.extract_spots(pdf_path)
