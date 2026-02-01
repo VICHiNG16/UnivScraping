@@ -127,58 +127,83 @@ class PDFParser:
                 for page in pdf.pages:
                     # Try to detect level from first valid text
                     if not detected_level:
+
                         page_text = (page.extract_text() or "").upper()
-                        if "MASTER" in page_text:
+                        
+                        # V9: Smarter Level Detection (Regex on Titles)
+                        if re.search(r"ADMITERE.*MASTER", page_text) or re.search(r"STUDII.*MASTER", page_text):
                             detected_level = "Master"
-                        elif "LICENTA" in page_text or "LICENȚĂ" in page_text:
+                        elif re.search(r"ADMITERE.*LICEN[TȚ]", page_text) or re.search(r"STUDII.*LICEN[TȚ]", page_text):
+                             detected_level = "Licenta"
+                        # Fallback: simple presence if no clear title found
+                        elif "MASTER" in page_text and "LICEN" not in page_text:
+                            detected_level = "Master"
+                        elif "LICEN" in page_text and "MASTER" not in page_text:
                             detected_level = "Licenta"
+                        # If both present (generic header), look for dominance?
+                        elif "LICEN" in page_text and "MASTER" in page_text:
+                            # Heuristic: Title usually is "Cifra de scolarizare ... Licenta"
+                             if page_text.count("LICEN") > page_text.count("MASTER"):
+                                 detected_level = "Licenta"
+                             else:
+                                 detected_level = "Master"
+
 
                     tables = page.extract_tables()
                     for table in tables:
-                        # Heuristic: Find header row
-                        header_idx = -1
+
+                        # Stacked Header Logic (Scan first 10 rows)
+                        header_found = False
+                        max_header_row = -1
                         col_map = {"name": -1, "budget": -1, "tax": -1}
                         
-                        for i, row in enumerate(table):
-                            # Normalize row text
+                        HEADER_KEYWORDS = ["domeni", "specializ", "program", "buget", "tax", "locuri", "cifra"]
+
+                        for i, row in enumerate(table[:10]):
+                            # Normalize row text (list of strings)
                             row_text = []
                             for c in row:
-                                if c:
-                                    # Normalize unicode (e.g. Ș -> S) for easier matching
-                                    # But keep original for extraction if needed? No, standardizing is safer for keywords.
-                                    txt = str(c).lower().replace("\n", " ").strip()
-                                    # Simple accent stripping for keywords
-                                    # (We don't need full normalization for the content, just the checks)
-                                    row_text.append(txt)
-                                else:
-                                    row_text.append("")
+                                txt = str(c).lower().replace("\n", " ").strip() if c else ""
+                                row_text.append(txt)
                             
-                            # Join for broader check
                             joined_row = " ".join(row_text)
                             
-                            # Detect Header
-                            # Expanded keywords for Agronomie ("Studii", "Cifra", "Locuri")
-                            HEADER_KEYWORDS = ["domeni", "specializ", "program", "studii", "buget", "tax", "cifra", "locuri"]
-                            
                             if any(k in joined_row for k in HEADER_KEYWORDS):
-                                header_idx = i
-                                # Map Columns
+                                header_found = True
+                                max_header_row = i
+                                
+
+                                # Map Columns (Cumulative - Prefer FIRST match)
                                 for c_idx, cell in enumerate(row_text):
                                     cell_norm = cell.replace("ă", "a").replace("ș", "s").replace("ț", "t").replace("â", "a").replace("î", "i")
                                     
-                                    if any(k in cell_norm for k in ["domeni", "specializ", "program", "studii"]): 
+                                    if col_map["name"] == -1 and any(k in cell_norm for k in ["domeni", "specializ", "program", "studii"]): 
                                         col_map["name"] = c_idx
-                                    if "buget" in cell_norm and "tax" not in cell_norm: 
+                                    
+                                    # Budget: Prefer first column that mentions "buget"
+                                    if col_map["budget"] == -1 and "buget" in cell_norm and "tax" not in cell_norm: 
                                         col_map["budget"] = c_idx
-                                    if "tax" in cell_norm: 
+                                    
+                                    # Tax: Prefer first column that mentions "tax"
+                                    if col_map["tax"] == -1 and "tax" in cell_norm: 
                                         col_map["tax"] = c_idx
-                                
-                                break
-                        
+
+
+                        # Fallback for name if we found header partially
+                        if header_found:
+                             if col_map["name"] == -1:
+                                 # Guess based on budget/tax position
+                                 if col_map["budget"] > 0: col_map["name"] = 0
+                                 elif col_map["budget"] == -1: col_map["name"] = 0 # Default
+
+
                         # Process Data Rows
-                        if header_idx != -1:
+                        if header_found and max_header_row != -1:
+                            self.logger.info(f"Header found at row {max_header_row}. Column Map: {col_map}")
                             extracted_count = 0
-                            for row in table[header_idx+1:]:
+
+                            for row in table[max_header_row+1:]:
+
                                 if not row: continue
                                 
                                 # Name
@@ -195,20 +220,27 @@ class PDFParser:
                                 budget = None
                                 tax = None
                                 
+
                                 if col_map["budget"] != -1 and col_map["budget"] < len(row):
                                     budget = self._parse_int(row[col_map["budget"]])
                                 
-                                if budget is None and len(row) > 2:
+                                if budget is None and not header_found and len(row) > 2:
                                     budget = self._parse_int(row[2])
 
                                 if col_map["tax"] != -1 and col_map["tax"] < len(row):
                                     tax = self._parse_int(row[col_map["tax"]])
                                 
-                                if tax is None and len(row) > 5:
+                                if tax is None and not header_found and len(row) > 5:
                                     tax = self._parse_int(row[5])
+
                                 
-                                # Allow extraction if we have a name (even if spots are missing, for synthesis)
+
+                                # Debug Logging
+                                self.logger.debug(f"Row[{len(row)}] Name='{name}' B_idx={col_map['budget']} T_idx={col_map['tax']} -> B={budget}, T={tax}")
+                                self.logger.debug(f"Row Content: {row}")
+                                
                                 allow_row = (budget is not None or tax is not None) or (len(name) > 5)
+
                                 
                                 if allow_row:
                                     results.append({

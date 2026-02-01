@@ -67,12 +67,14 @@ class RomanianProgramMatcher:
 
         best_score, best_row = candidates[0]
         
+
         # Ambiguity check
         status = "match"
         if len(candidates) > 1:
             second_score = candidates[1][0]
-            if (best_score - second_score) < 0.15:
+            if (best_score - second_score) < 0.1: # V9: Lowered from 0.15 to avoid false positives on similar suffixes
                 status = "ambiguous" # Close call
+
         
         if best_score < 0.5:
             status = "low_confidence"
@@ -96,7 +98,17 @@ class RomanianProgramMatcher:
         is_html_lic = "licenta" in html_level or "licență" in html_level
         is_html_mas = "master" in html_level
         
+
         # If PDF data implies level (often from header context), strictly enforce it.
+
+
+        # 1. Name Similarity (40%)
+        if not html_norm_precomputed:
+            html_norm = self._romanian_normalize(html_prog.get("name", ""))
+            html_norm = self._expand_abbreviations(html_norm)
+        else:
+            html_norm = html_norm_precomputed
+
         # Assuming PDF parser provides 'level' context now.
         if pdf_level:
             is_pdf_lic = "licenta" in pdf_level or "licență" in pdf_level
@@ -106,17 +118,13 @@ class RomanianProgramMatcher:
                 return 0.0
 
         # ... (rest of scoring)
-        
-        # 1. Name Similarity (40%)
-        if not html_norm_precomputed:
-            html_norm = self._romanian_normalize(html_prog.get("name", ""))
-            html_norm = self._expand_abbreviations(html_norm)
-        else:
-            html_norm = html_norm_precomputed
-            
+
+
         pdf_norm = self._romanian_normalize(pdf_row.get("program_name", ""))
         pdf_norm = self._expand_abbreviations(pdf_norm)
+
         
+
         # Hybrid fuzzy score
         token_set = fuzz.token_set_ratio(html_norm, pdf_norm) / 100.0
         partial = fuzz.partial_ratio(html_norm, pdf_norm) / 100.0
@@ -142,23 +150,38 @@ class RomanianProgramMatcher:
                 domain_score = 1.0
         
         # Weighted Sum
-        # If name is totally off, other signals don't matter matching garbage
         if name_score < 0.3:
             return 0.0
             
-        final_score = (name_score * 0.5) + (level_score * 0.3) + (domain_score * 0.2)
-        
-        # Bonus for exact abbrev matches "Calc." == "Calculatoare" (handled by expansion + token_set)
+
+        # V9: Dynamic Weighting
+        if not html_domain or not pdf_domain:
+            # If domain context logic is missing, rely heavily on name + level
+            final_score = (name_score * 0.7) + (level_score * 0.3)
+        else:
+            final_score = (name_score * 0.5) + (level_score * 0.3) + (domain_score * 0.2)
         
         return min(final_score, 1.0)
 
+
+
+
+
     def _romanian_normalize(self, text: str) -> str:
         if not text: return ""
+
+        import unicodedata
         text = text.lower()
+        # Unicode Normalization (NFC) to compose chars, then NFD to separate diacritics
+        text = unicodedata.normalize('NFC', text)
+        
         # Diacritics Mapping (Strip to ASCII for robust fuzzy matching)
         # We map all variants to their base ASCII char
         text = text.replace("ş", "s").replace("ș", "s").replace("ţ", "t").replace("ț", "t")
         text = text.replace("ă", "a").replace("â", "a").replace("î", "i")
+        # Combine combining diacritics
+        text = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
+
         
         # Remove parens content often containing "textul" or "limba" if trivial, 
         # but keep "engleza"
@@ -295,8 +318,14 @@ class DataFusionEngine:
             
         pdf_rows_list = [] # V8.7: List of {rows, url, score}
         
+
         for candidate in spots_candidates:
+            if "local_path" not in candidate:
+                logger.warning(f"[{slug}] Skipping candidate {candidate.get('link_text')} (no local_path)")
+                continue
+
             pdf_path = Path(candidate["local_path"])
+
             if not pdf_path.exists():
                  logger.error(f"[{slug}] PDF missing: {pdf_path}")
                  continue
@@ -525,7 +554,11 @@ class DataFusionEngine:
                 self._save_program(slug, prog)
             return
 
+
         matcher = RomanianProgramMatcher(programs, filtered_rows)
+        self.matcher = matcher # Expose for debug script
+        results = matcher.match_all()
+
         results = matcher.match_all()
         
         for res in results:
