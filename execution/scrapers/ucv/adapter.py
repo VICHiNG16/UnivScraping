@@ -53,7 +53,7 @@ class UCVAdapter(UniversityAdapter):
         # Generic container for UCV
         container = soup.find("div", id="continut_standard") or soup.find("div", id="main_content") or soup
         
-        BLACKLIST = ["ghid", "documente", "acte", "cerere", "declaratie", "metodologie", "regulament", "calendar", "orar", "fise", "tematica"]
+        BLACKLIST = ["ghid", "documente", "acte", "cerere", "declaratie", "metodologie", "regulament", "calendar", "orar", "fise", "tematica", "anc", "calificari"]
 
         for link in container.find_all("a", href=True):
             href = link["href"].strip()

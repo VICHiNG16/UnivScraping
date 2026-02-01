@@ -11,6 +11,7 @@ from execution.base.browser_manager import BrowserManager
 from execution.models.provenance import ProvenanceMixin
 from pydantic import BaseModel
 from execution.scrapers.adapter_interface import UniversityAdapter
+from execution.processors.gold_aggregator import GoldAggregator
 from rapidfuzz import process, fuzz
 
 class BaseScraper(ABC):
@@ -155,6 +156,13 @@ class BaseScraper(ABC):
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
         with open(self.base_dir / "manifest.json", "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
+
+        # 6. Gold Layer: Aggregation
+        try:
+            aggregator = GoldAggregator(self.run_id)
+            aggregator.aggregate()
+        except Exception as e:
+            self.logger.error(f"Gold Layer Aggregation failed: {e}")
 
     def _enrich_from_pdf(self, slug: str, pdf_path: str, pdf_url: str):
         """
